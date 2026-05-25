@@ -4,6 +4,30 @@ All notable changes to `rolepod-wplab-companion` are documented here. Follows [K
 
 Companion versions track `@rolepod/wplab` major version.
 
+## [1.0.0] — 2026-05-25 — Stable (schema-frozen)
+
+### Locked
+
+- 8 REST endpoints under `/wp-json/wplab/v1/`: handshake, introspect (5 scopes), execute-php, wp-cli, fs-read, fs-write, php-session, request-observer (+ poll).
+- Endpoint request/response JSON shapes.
+- Audit log entry shape (timestamp, audit_id, endpoint, user, site_url, result, error?, payload_sha256?).
+- Production-guard semantics (siteurl glob match; no override on execute-php / fs-write).
+- Session-token TTL default 30 min (admin can override per-install).
+- AST screen forbidden-token list (eval, assert, create_function, system, passthru, shell_exec, exec, proc_open, popen, pcntl_*, dl, backtick, dynamic include/require).
+- Config schema (endpoints_enabled, execute_php_enabled, production_hosts).
+- Capability map advertised in handshake.
+
+### Pairs with
+
+- `@rolepod/wplab` v1.0 — Node-side bridge consumes these endpoints + locks tool surface.
+
+### Maintainer next actions (post-tag)
+
+- Submit to wordpress.org plugin directory (may take weeks; if rejected, GitHub Releases stays the canonical distribution).
+- Bundle `wp-cli.phar` in release zip (currently fetched separately).
+- Companion v1.x+ adds endpoints only; no breaking changes.
+
+
 ## [0.2.0] — 2026-05-25
 
 ### Added

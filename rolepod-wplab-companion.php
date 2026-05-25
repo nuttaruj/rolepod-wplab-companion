@@ -5,7 +5,7 @@
  * Description:       Optional companion for rolepod-wplab. Exposes guarded REST endpoints so AI coding agents (Claude Code / Cursor / Codex / Gemini) can run runtime introspection (and, with explicit opt-in, execute-php) on this WordPress install. v0.1 ships execute-php DISABLED. Enable per-endpoint in Settings → WPLab Companion.
  * Author:            nuttaruj
  * Author URI:        https://github.com/nuttaruj
- * Version:           0.2.0
+ * Version:           1.0.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * License:           MIT
@@ -21,7 +21,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ROLEPOD_WPLAB_COMPANION_VERSION', '0.2.0');
+define('ROLEPOD_WPLAB_COMPANION_VERSION', '1.0.0');
 define('ROLEPOD_WPLAB_COMPANION_FILE', __FILE__);
 define('ROLEPOD_WPLAB_COMPANION_DIR', plugin_dir_path(__FILE__));
 define('ROLEPOD_WPLAB_COMPANION_NAMESPACE', 'wplab/v1');
