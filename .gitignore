@@ -1,0 +1,30 @@
+# Composer
+vendor/
+composer.lock
+
+# Build / release artifacts
+*.zip
+build/
+dist/
+
+# Bundled wp-cli phar (v0.2+) — too big for git; fetched by build script
+bin/wp-cli.phar
+
+# Tests
+.phpunit.result.cache
+.phpunit.cache/
+coverage/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# WP-CLI runtime
+wp-cli.local.yml
+
+# Local env
+.env
+.env.local
