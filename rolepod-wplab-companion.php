@@ -5,7 +5,7 @@
  * Description:       Optional companion for rolepod-wplab. Exposes guarded REST endpoints so AI coding agents (Claude Code / Cursor / Codex / Gemini) can run runtime introspection (and, with explicit opt-in, execute-php) on this WordPress install. v0.1 ships execute-php DISABLED. Enable per-endpoint in Settings → WPLab Companion.
  * Author:            nuttaruj
  * Author URI:        https://github.com/nuttaruj
- * Version:           0.1.0
+ * Version:           0.2.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * License:           MIT
@@ -21,7 +21,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ROLEPOD_WPLAB_COMPANION_VERSION', '0.1.0');
+define('ROLEPOD_WPLAB_COMPANION_VERSION', '0.2.0');
 define('ROLEPOD_WPLAB_COMPANION_FILE', __FILE__);
 define('ROLEPOD_WPLAB_COMPANION_DIR', plugin_dir_path(__FILE__));
 define('ROLEPOD_WPLAB_COMPANION_NAMESPACE', 'wplab/v1');
@@ -43,6 +43,12 @@ add_action('rest_api_init', static function (): void {
     \RolepodWplabCompanion\Endpoint\Handshake::register();
     \RolepodWplabCompanion\Endpoint\Introspect::register();
     \RolepodWplabCompanion\Endpoint\ExecutePhp::register();
+    // v0.2 endpoints
+    \RolepodWplabCompanion\Endpoint\WpCli::register();
+    \RolepodWplabCompanion\Endpoint\FsRead::register();
+    \RolepodWplabCompanion\Endpoint\FsWrite::register();
+    \RolepodWplabCompanion\Endpoint\PhpSession::register();
+    \RolepodWplabCompanion\Endpoint\RequestObserver::register();
 });
 
 add_action('admin_menu', static function (): void {
@@ -56,7 +62,7 @@ register_activation_hook(__FILE__, static function (): void {
     add_option('rolepod_wplab_companion_version', ROLEPOD_WPLAB_COMPANION_VERSION);
     add_option('rolepod_wplab_companion_config', [
         'endpoints_enabled' => false, // OFF by default — admin must opt in
-        'execute_php_enabled' => false, // OFF by default in v0.1 — opt-in via admin
+        'execute_php_enabled' => true, // v0.2: ON by default once admin enables endpoints
         'production_hosts' => [], // glob patterns
     ]);
 });

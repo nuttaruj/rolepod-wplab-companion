@@ -18,7 +18,7 @@ use WP_Error;
  */
 final class Introspect
 {
-    private const ALLOWED_SCOPES = ['hooks', 'transients', 'options_full', 'request_state'];
+    private const ALLOWED_SCOPES = ['hooks', 'transients', 'options_full', 'request_state', 'plugin_internals'];
 
     public static function register(): void
     {
@@ -87,8 +87,23 @@ final class Introspect
                 return new WP_REST_Response(self::dumpOptions($includeValues), 200);
             case 'request_state':
                 return new WP_REST_Response(self::dumpRequestState(), 200);
+            case 'plugin_internals':
+                return new WP_REST_Response(self::dumpPluginInternals((string) $req->get_param('plugin_slug')), 200);
         }
         return new WP_REST_Response(['ok' => false, 'error_code' => 'UNKNOWN_SCOPE'], 400);
+    }
+
+    private static function dumpPluginInternals(string $slug): array
+    {
+        if ($slug === '') {
+            return ['ok' => false, 'error_code' => 'PLUGIN_SLUG_REQUIRED'];
+        }
+        // 3rd-party plugins can register their own introspection via this filter.
+        $data = apply_filters('rolepod_wplab_introspect_' . $slug, null);
+        if ($data === null) {
+            return ['ok' => false, 'error_code' => 'NO_INTROSPECTION_REGISTERED', 'hint' => 'plugin must add_filter("rolepod_wplab_introspect_' . $slug . '", fn() => [...])'];
+        }
+        return ['plugin' => $slug, 'data' => $data];
     }
 
     private static function dumpHooks(): array
