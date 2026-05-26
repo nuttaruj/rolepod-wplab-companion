@@ -4,6 +4,17 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.3.1] — 2026-05-26 — Auto-install ledger schema on upgrade
+
+### Fixed
+
+- `plugins_loaded` hook now auto-installs the ledger schema when the option-stored
+  schema version differs from the bundled constant. Without this, sites that
+  UPDATED from v2.1 → v2.3 (instead of fresh-activated) had the recorder API
+  silently inserting into a missing table — every `record` call returned `ok:true`
+  with a fresh audit_id, but `query` returned empty. Caught in e2e on the demo
+  site immediately after the v2.3.0 ship.
+
 ## [2.3.0] — 2026-05-26 — AI Change Ledger + per-change toggle + panic-revert
 
 ### Added — `wp_rolepod_wp_changes` ledger table
