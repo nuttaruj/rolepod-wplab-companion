@@ -39,6 +39,23 @@ final class WpCli
                 ],
             ]
         );
+
+        // Idempotent bootstrap: fetches the wp-cli.phar from upstream and
+        // drops it at wp-content/uploads/wplab-bin/wp-cli.phar. Called by
+        // the MCP after a /wp-cli call returns WP_CLI_NOT_BUNDLED, so the
+        // host gets a working wp-cli without anyone SSH'ing in.
+        register_rest_route(
+            ROLEPOD_WP_REST_NAMESPACE,
+            '/wp-cli/bootstrap',
+            [
+                'methods' => 'POST',
+                'callback' => [self::class, 'handleBootstrap'],
+                'permission_callback' => [self::class, 'permission'],
+                'args' => [
+                    'session_token' => ['required' => true, 'type' => 'string'],
+                ],
+            ]
+        );
     }
 
     public static function permission(WP_REST_Request $req)
@@ -124,6 +141,96 @@ final class WpCli
             'ok' => $exitCode === 0,
             'exit_code' => $exitCode,
             'stdout' => $stdout,
+            'audit_id' => $auditId,
+        ], 200);
+    }
+
+    public static function handleBootstrap(WP_REST_Request $req): WP_REST_Response
+    {
+        $userId = get_current_user_id();
+        $token = (string) $req->get_param('session_token');
+        if (!SessionToken::verify($token, $userId)) {
+            return new WP_REST_Response([
+                'ok' => false,
+                'error_code' => 'INVALID_OR_EXPIRED_TOKEN',
+            ], 401);
+        }
+
+        $target = self::expectedPharPath();
+
+        // Idempotent — return ok:true if phar already present.
+        if (is_file($target)) {
+            return new WP_REST_Response([
+                'ok' => true,
+                'already_present' => true,
+                'path' => $target,
+                'bytes' => (int) filesize($target),
+            ], 200);
+        }
+
+        $dir = dirname($target);
+        if (!is_dir($dir) && !wp_mkdir_p($dir)) {
+            return new WP_REST_Response([
+                'ok' => false,
+                'error_code' => 'MKDIR_FAILED',
+                'error_message' => 'could not create ' . $dir,
+            ], 500);
+        }
+
+        // Pull pinned upstream phar. Public asset, no auth needed.
+        $upstream = 'https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar';
+        $res = wp_remote_get($upstream, ['timeout' => 60]);
+        if (is_wp_error($res)) {
+            return new WP_REST_Response([
+                'ok' => false,
+                'error_code' => 'FETCH_FAILED',
+                'error_message' => $res->get_error_message(),
+            ], 502);
+        }
+
+        $code = (int) wp_remote_retrieve_response_code($res);
+        $body = (string) wp_remote_retrieve_body($res);
+        if ($code !== 200 || $body === '') {
+            return new WP_REST_Response([
+                'ok' => false,
+                'error_code' => 'FETCH_BAD_RESPONSE',
+                'error_message' => "upstream returned HTTP {$code}, body bytes=" . strlen($body),
+            ], 502);
+        }
+
+        // Sanity-check: phar starts with #!/usr/bin/env php and contains __HALT_COMPILER.
+        if (strpos($body, "__HALT_COMPILER") === false) {
+            return new WP_REST_Response([
+                'ok' => false,
+                'error_code' => 'FETCH_NOT_A_PHAR',
+                'error_message' => 'upstream response did not look like a phar (no __HALT_COMPILER marker)',
+            ], 502);
+        }
+
+        $written = file_put_contents($target, $body);
+        if ($written === false) {
+            return new WP_REST_Response([
+                'ok' => false,
+                'error_code' => 'WRITE_FAILED',
+                'error_message' => "could not write to {$target}",
+            ], 500);
+        }
+
+        @chmod($target, 0644);
+
+        $auditId = Log::append([
+            'endpoint' => 'wp-cli/bootstrap',
+            'user' => (string) wp_get_current_user()->user_login,
+            'site_url' => (string) get_option('siteurl'),
+            'result' => 'success',
+            'error' => null,
+        ]);
+
+        return new WP_REST_Response([
+            'ok' => true,
+            'already_present' => false,
+            'path' => $target,
+            'bytes' => $written,
             'audit_id' => $auditId,
         ], 200);
     }

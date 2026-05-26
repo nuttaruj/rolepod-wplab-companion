@@ -4,6 +4,35 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.1.0] — 2026-05-26 — Shared-host fix + auto-bootstrap wp-cli
+
+### Fixed
+
+- **SessionToken now uses WP transients** instead of `wp_cache_*`. v2.0.0 stored
+  tokens in the WP object cache which on shared hosts (no Redis/Memcached) is
+  per-request only, so the handshake-then-call flow could not work — every
+  follow-up call returned `INVALID_OR_EXPIRED_TOKEN`. Transients route through
+  the object cache when one is present and fall back to wp_options rows when
+  not, so tokens now persist across requests on every host.
+
+### Added
+
+- **`POST /wplab/v1/wp-cli/bootstrap`** — idempotent endpoint that fetches the
+  pinned `wp-cli.phar` from `raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/`
+  and writes it to `wp-content/uploads/wplab-bin/wp-cli.phar`. Sanity-checks
+  the response (must contain `__HALT_COMPILER` marker) before saving. MCP
+  side calls this automatically the first time a wp-cli call returns
+  `WP_CLI_NOT_BUNDLED`, so shared hosts get a working wp-cli without anyone
+  SSH'ing in. Verifies file presence on re-call → returns `already_present: true`.
+
+### Pairs with
+
+- `@rolepod/wplab` v1.4.0 — adds `RestTarget.wpCli` + `Bridge.wpCli` +
+  `Bridge.fileRead/fileWrite` so RestTarget gets full shell capability via this
+  companion. Composite tools (audit_security, diagnose, cron_tool, cache_tool,
+  mail_test, user_session_list) now work over REST without needing local/ssh/docker
+  target kind.
+
 ## [2.0.0] — 2026-05-26 — Rebrand: rolepod-wp
 
 ### Breaking

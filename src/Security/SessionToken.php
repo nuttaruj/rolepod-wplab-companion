@@ -5,15 +5,20 @@ namespace Rolepod\Wp\Security;
 
 /**
  * Per-session execution token. Issued by /handshake, required on /execute-php
- * (and v0.2+ /introspect for write-side calls). Stored via wp_cache_*
- * (in-memory per FastCGI worker) — survives within a single PHP-FPM process
- * but not across restarts. Acceptable security trade-off for v0.1.
+ * + /wp-cli + /fs-{read,write} + /php-session + /request-observer.
  *
- * Token format: 32 hex chars prefixed with `wplab_sess_`.
+ * Stored as a WP transient so the token survives across PHP-FPM workers +
+ * across requests. v1.x stored via wp_cache_* which is per-request on hosts
+ * without a persistent object cache (Redis/Memcached) — that broke the
+ * handshake-then-act flow on shared hosting. Transients route through the
+ * object cache when one is present, fall back to wp_options rows when not,
+ * so the token persists regardless of host config.
+ *
+ * Token format: 32 hex chars prefixed with `wplab_sess_`. The token itself
+ * is the transient name — 256-bit entropy makes guessing infeasible.
  */
 final class SessionToken
 {
-    private const CACHE_GROUP = 'rolepod_wp';
     private const TTL_SECONDS = 1800; // 30 min
     private const TOKEN_PREFIX = 'wplab_sess_';
 
@@ -25,7 +30,7 @@ final class SessionToken
             'issued_at' => time(),
             'expires_at' => time() + self::TTL_SECONDS,
         ];
-        wp_cache_set($token, $payload, self::CACHE_GROUP, self::TTL_SECONDS);
+        set_transient($token, $payload, self::TTL_SECONDS);
         return $token;
     }
 
@@ -34,7 +39,7 @@ final class SessionToken
         if (strpos($token, self::TOKEN_PREFIX) !== 0) {
             return false;
         }
-        $payload = wp_cache_get($token, self::CACHE_GROUP);
+        $payload = get_transient($token);
         if (!is_array($payload)) {
             return false;
         }
@@ -42,7 +47,7 @@ final class SessionToken
             return false;
         }
         if (($payload['expires_at'] ?? 0) < time()) {
-            wp_cache_delete($token, self::CACHE_GROUP);
+            delete_transient($token);
             return false;
         }
         return true;
@@ -50,7 +55,7 @@ final class SessionToken
 
     public static function revoke(string $token): void
     {
-        wp_cache_delete($token, self::CACHE_GROUP);
+        delete_transient($token);
     }
 
     public static function ttlSeconds(): int
