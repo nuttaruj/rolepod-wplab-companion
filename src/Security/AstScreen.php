@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace RolepodWplabCompanion\Security;
+namespace Rolepod\Wp\Security;
 
 /**
  * v0.1: token-based PHP-payload blocklist screen.

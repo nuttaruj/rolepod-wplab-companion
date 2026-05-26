@@ -1,13 +1,13 @@
 <?php
 declare(strict_types=1);
 
-namespace RolepodWplabCompanion\Admin;
+namespace Rolepod\Wp\Admin;
 
-use RolepodWplabCompanion\Audit\Log;
-use RolepodWplabCompanion\Config;
+use Rolepod\Wp\Audit\Log;
+use Rolepod\Wp\Config;
 
 /**
- * Settings → WPLab Companion (single admin page).
+ * Settings → Rolepod for WordPress (single admin page).
  *
  * - Master toggle (endpoints_enabled)
  * - execute-php toggle (execute_php_enabled, v0.1 default OFF)
@@ -16,14 +16,14 @@ use RolepodWplabCompanion\Config;
  */
 final class SettingsPage
 {
-    private const SLUG = 'rolepod-wplab-companion';
-    private const NONCE_ACTION = 'rolepod_wplab_companion_save';
+    private const SLUG = 'rolepod-wp';
+    private const NONCE_ACTION = 'rolepod_wp_save';
 
     public static function register(): void
     {
         add_options_page(
-            'WPLab Companion',
-            'WPLab Companion',
+            'Rolepod for WordPress',
+            'Rolepod for WordPress',
             'manage_options',
             self::SLUG,
             [self::class, 'render']
@@ -37,9 +37,9 @@ final class SettingsPage
         }
 
         if (
-            isset($_POST['rolepod_wplab_companion_save_nonce'])
+            isset($_POST['rolepod_wp_save_nonce'])
             && wp_verify_nonce(
-                sanitize_text_field((string) wp_unslash($_POST['rolepod_wplab_companion_save_nonce'])),
+                sanitize_text_field((string) wp_unslash($_POST['rolepod_wp_save_nonce'])),
                 self::NONCE_ACTION
             )
         ) {
@@ -53,11 +53,11 @@ final class SettingsPage
 
         ?>
         <div class="wrap">
-            <h1>Rolepod WPLab Companion</h1>
-            <p>Companion v<?php echo esc_html(ROLEPOD_WPLAB_COMPANION_VERSION); ?> — exposes guarded REST endpoints under <code>/wp-json/wplab/v1/</code> for use by the Node MCP (<a href="https://github.com/nuttaruj/rolepod-wplab" target="_blank" rel="noopener">rolepod-wplab</a>).</p>
+            <h1>Rolepod for WordPress</h1>
+            <p>Plugin v<?php echo esc_html(ROLEPOD_WP_VERSION); ?> — exposes guarded REST endpoints under <code>/wp-json/wplab/v1/</code> for use by the Node MCP (<a href="https://github.com/nuttaruj/rolepod-wplab" target="_blank" rel="noopener">rolepod-wplab</a>). Part of the <a href="https://github.com/nuttaruj/rolepod" target="_blank" rel="noopener">Rolepod ecosystem</a>.</p>
 
             <form method="post">
-                <?php wp_nonce_field(self::NONCE_ACTION, 'rolepod_wplab_companion_save_nonce'); ?>
+                <?php wp_nonce_field(self::NONCE_ACTION, 'rolepod_wp_save_nonce'); ?>
 
                 <h2>Endpoint master toggle</h2>
                 <p>
@@ -117,7 +117,7 @@ final class SettingsPage
                         <?php endforeach; ?>
                     </tbody>
                 </table>
-                <p class="description">Full payloads (for execute-php calls) are at <code>wp-content/uploads/wplab-audit/&lt;audit_id&gt;.log</code> (mode 0600). Append-only — never modified after write.</p>
+                <p class="description">Full payloads (for execute-php calls) are at <code>wp-content/uploads/rolepod-wp-audit/&lt;audit_id&gt;.log</code> (mode 0600). Append-only — never modified after write.</p>
             <?php endif; ?>
         </div>
         <?php

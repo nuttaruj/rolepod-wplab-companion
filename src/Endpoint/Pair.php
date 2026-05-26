@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace RolepodWplabCompanion\Endpoint;
+namespace Rolepod\Wp\Endpoint;
 
-use RolepodWplabCompanion\Audit\Log;
-use RolepodWplabCompanion\Config;
-use RolepodWplabCompanion\Security\PairToken;
-use RolepodWplabCompanion\Security\ProductionGuard;
+use Rolepod\Wp\Audit\Log;
+use Rolepod\Wp\Config;
+use Rolepod\Wp\Security\PairToken;
+use Rolepod\Wp\Security\ProductionGuard;
 use WP_Application_Passwords;
 use WP_Error;
 use WP_REST_Request;
@@ -38,7 +38,7 @@ final class Pair
     public static function register(): void
     {
         register_rest_route(
-            ROLEPOD_WPLAB_COMPANION_NAMESPACE,
+            ROLEPOD_WP_REST_NAMESPACE,
             '/pair/generate',
             [
                 'methods' => 'POST',
@@ -47,7 +47,7 @@ final class Pair
             ]
         );
         register_rest_route(
-            ROLEPOD_WPLAB_COMPANION_NAMESPACE,
+            ROLEPOD_WP_REST_NAMESPACE,
             '/pair/redeem',
             [
                 'methods' => 'POST',
@@ -61,14 +61,14 @@ final class Pair
     {
         if (!Config::endpointsEnabled()) {
             return new WP_Error(
-                'rolepod_wplab_disabled',
-                'Companion endpoints are disabled. Enable in Settings → WPLab Companion.',
+                'rolepod_wp_disabled',
+                'Companion endpoints are disabled. Enable in Settings → Rolepod for WordPress.',
                 ['status' => 403]
             );
         }
         if (!current_user_can('manage_options')) {
             return new WP_Error(
-                'rolepod_wplab_unauthorized',
+                'rolepod_wp_unauthorized',
                 'manage_options capability required.',
                 ['status' => 403]
             );
@@ -81,7 +81,7 @@ final class Pair
         // Pair token IS the auth. Public endpoint by design.
         if (!Config::endpointsEnabled()) {
             return new WP_Error(
-                'rolepod_wplab_disabled',
+                'rolepod_wp_disabled',
                 'Companion endpoints are disabled.',
                 ['status' => 403]
             );
@@ -129,7 +129,7 @@ final class Pair
             'expires_at' => gmdate('c', $expiresAt),
             'ttl_seconds' => PairToken::ttlSeconds(),
             'siteurl' => (string) get_option('siteurl'),
-            'companion_version' => ROLEPOD_WPLAB_COMPANION_VERSION,
+            'companion_version' => ROLEPOD_WP_VERSION,
         ], 200);
     }
 
@@ -196,7 +196,7 @@ final class Pair
             'app_password' => $plain,
             'app_password_name' => $appName,
             'capabilities' => $capabilities,
-            'companion_version' => ROLEPOD_WPLAB_COMPANION_VERSION,
+            'companion_version' => ROLEPOD_WP_VERSION,
             'siteurl' => (string) get_option('siteurl'),
             'is_production' => ProductionGuard::isProduction(),
         ], 200);
@@ -229,14 +229,14 @@ final class Pair
 
     private static function failureCount(string $ip): int
     {
-        $key = 'rolepod_wplab_pair_fail_' . md5($ip);
+        $key = 'rolepod_wp_pair_fail_' . md5($ip);
         $cur = (int) get_transient($key);
         return $cur > 0 ? $cur : 0;
     }
 
     private static function recordFailure(string $ip): void
     {
-        $key = 'rolepod_wplab_pair_fail_' . md5($ip);
+        $key = 'rolepod_wp_pair_fail_' . md5($ip);
         $cur = self::failureCount($ip);
         set_transient($key, $cur + 1, self::REDEEM_FAIL_WINDOW);
     }

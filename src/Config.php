@@ -1,10 +1,10 @@
 <?php
 declare(strict_types=1);
 
-namespace RolepodWplabCompanion;
+namespace Rolepod\Wp;
 
 /**
- * Read/write companion config stored in wp_options::rolepod_wplab_companion_config.
+ * Read/write companion config stored in wp_options::rolepod_wp_config.
  *
  * Shape:
  *   [
@@ -15,7 +15,7 @@ namespace RolepodWplabCompanion;
  */
 final class Config
 {
-    private const OPTION = 'rolepod_wplab_companion_config';
+    private const OPTION = 'rolepod_wp_config';
 
     public static function all(): array
     {

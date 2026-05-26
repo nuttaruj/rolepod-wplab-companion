@@ -1,19 +1,19 @@
 <?php
 declare(strict_types=1);
 
-namespace RolepodWplabCompanion\Audit;
+namespace Rolepod\Wp\Audit;
 
 /**
  * Append-only audit log for power-endpoint calls. v0.1 writes:
- *   - File: wp-content/uploads/wplab-audit/{audit_id}.log  (mode 0600)
- *   - Option: rolepod_wplab_audit_log (capped 1000 entries, FIFO eviction)
+ *   - File: wp-content/uploads/rolepod-wp-audit/{audit_id}.log  (mode 0600)
+ *   - Option: rolepod_wp_audit_log (capped 1000 entries, FIFO eviction)
  *
  * v0.2 will swap the option-array store for a rolling-file index to avoid
  * the 1000-entry cap on heavy use.
  */
 final class Log
 {
-    private const OPTION = 'rolepod_wplab_audit_log';
+    private const OPTION = 'rolepod_wp_audit_log';
     private const OPTION_CAP = 1000;
 
     /**
@@ -30,7 +30,7 @@ final class Log
      */
     public static function append(array $record): string
     {
-        $auditId = 'wplab_audit_' . bin2hex(random_bytes(4));
+        $auditId = 'rolepod_wp_audit_' . bin2hex(random_bytes(4));
         $row = array_merge($record, [
             'audit_id' => $auditId,
             'timestamp' => gmdate('c'),
@@ -67,7 +67,7 @@ final class Log
         if (!is_array($uploadDir) || empty($uploadDir['basedir'])) {
             return;
         }
-        $auditDir = trailingslashit($uploadDir['basedir']) . 'wplab-audit';
+        $auditDir = trailingslashit($uploadDir['basedir']) . 'rolepod-wp-audit';
         if (!is_dir($auditDir)) {
             @mkdir($auditDir, 0700, true);
         }

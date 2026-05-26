@@ -15,14 +15,14 @@ if (!defined('WP_UNINSTALL_PLUGIN')) {
 }
 
 // Remove options
-delete_option('rolepod_wplab_companion_version');
-delete_option('rolepod_wplab_companion_config');
-delete_option('rolepod_wplab_audit_log');
+delete_option('rolepod_wp_version');
+delete_option('rolepod_wp_config');
+delete_option('rolepod_wp_audit_log');
 
 // Remove audit log directory
 $uploadDir = wp_upload_dir();
 if (is_array($uploadDir) && !empty($uploadDir['basedir'])) {
-    $auditDir = trailingslashit($uploadDir['basedir']) . 'wplab-audit';
+    $auditDir = trailingslashit($uploadDir['basedir']) . 'rolepod-wp-audit';
     if (is_dir($auditDir)) {
         $files = glob($auditDir . '/*.log');
         if (is_array($files)) {

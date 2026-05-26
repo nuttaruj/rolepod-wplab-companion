@@ -1,10 +1,10 @@
 <?php
 declare(strict_types=1);
 
-namespace RolepodWplabCompanion\Endpoint;
+namespace Rolepod\Wp\Endpoint;
 
-use RolepodWplabCompanion\Config;
-use RolepodWplabCompanion\Security\ProductionGuard;
+use Rolepod\Wp\Config;
+use Rolepod\Wp\Security\ProductionGuard;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
@@ -23,7 +23,7 @@ final class Introspect
     public static function register(): void
     {
         register_rest_route(
-            ROLEPOD_WPLAB_COMPANION_NAMESPACE,
+            ROLEPOD_WP_REST_NAMESPACE,
             '/introspect',
             [
                 'methods' => 'GET',
@@ -48,14 +48,14 @@ final class Introspect
     {
         if (!Config::endpointsEnabled()) {
             return new WP_Error(
-                'rolepod_wplab_disabled',
-                'Companion endpoints are disabled. Enable in Settings → WPLab Companion.',
+                'rolepod_wp_disabled',
+                'Companion endpoints are disabled. Enable in Settings → Rolepod for WordPress.',
                 ['status' => 403]
             );
         }
         if (!current_user_can('manage_options')) {
             return new WP_Error(
-                'rolepod_wplab_unauthorized',
+                'rolepod_wp_unauthorized',
                 'manage_options capability required.',
                 ['status' => 403]
             );
@@ -99,9 +99,9 @@ final class Introspect
             return ['ok' => false, 'error_code' => 'PLUGIN_SLUG_REQUIRED'];
         }
         // 3rd-party plugins can register their own introspection via this filter.
-        $data = apply_filters('rolepod_wplab_introspect_' . $slug, null);
+        $data = apply_filters('rolepod_wp_introspect_' . $slug, null);
         if ($data === null) {
-            return ['ok' => false, 'error_code' => 'NO_INTROSPECTION_REGISTERED', 'hint' => 'plugin must add_filter("rolepod_wplab_introspect_' . $slug . '", fn() => [...])'];
+            return ['ok' => false, 'error_code' => 'NO_INTROSPECTION_REGISTERED', 'hint' => 'plugin must add_filter("rolepod_wp_introspect_' . $slug . '", fn() => [...])'];
         }
         return ['plugin' => $slug, 'data' => $data];
     }

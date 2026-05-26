@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace RolepodWplabCompanion\Endpoint;
+namespace Rolepod\Wp\Endpoint;
 
-use RolepodWplabCompanion\Audit\Log;
-use RolepodWplabCompanion\Config;
-use RolepodWplabCompanion\Security\ProductionGuard;
-use RolepodWplabCompanion\Security\SessionToken;
+use Rolepod\Wp\Audit\Log;
+use Rolepod\Wp\Config;
+use Rolepod\Wp\Security\ProductionGuard;
+use Rolepod\Wp\Security\SessionToken;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
@@ -26,7 +26,7 @@ final class WpCli
     public static function register(): void
     {
         register_rest_route(
-            ROLEPOD_WPLAB_COMPANION_NAMESPACE,
+            ROLEPOD_WP_REST_NAMESPACE,
             '/wp-cli',
             [
                 'methods' => 'POST',
@@ -44,10 +44,10 @@ final class WpCli
     public static function permission(WP_REST_Request $req)
     {
         if (!Config::endpointsEnabled()) {
-            return new WP_Error('rolepod_wplab_disabled', 'Companion endpoints disabled.', ['status' => 403]);
+            return new WP_Error('rolepod_wp_disabled', 'Companion endpoints disabled.', ['status' => 403]);
         }
         if (!current_user_can('manage_options')) {
-            return new WP_Error('rolepod_wplab_unauthorized', 'manage_options required.', ['status' => 403]);
+            return new WP_Error('rolepod_wp_unauthorized', 'manage_options required.', ['status' => 403]);
         }
         return true;
     }

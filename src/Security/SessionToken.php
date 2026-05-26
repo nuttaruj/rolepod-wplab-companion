@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace RolepodWplabCompanion\Security;
+namespace Rolepod\Wp\Security;
 
 /**
  * Per-session execution token. Issued by /handshake, required on /execute-php
@@ -13,7 +13,7 @@ namespace RolepodWplabCompanion\Security;
  */
 final class SessionToken
 {
-    private const CACHE_GROUP = 'rolepod_wplab_companion';
+    private const CACHE_GROUP = 'rolepod_wp';
     private const TTL_SECONDS = 1800; // 30 min
     private const TOKEN_PREFIX = 'wplab_sess_';
 

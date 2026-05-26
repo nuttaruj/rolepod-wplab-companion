@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace RolepodWplabCompanion\Security;
+namespace Rolepod\Wp\Security;
 
 /**
  * One-time pair token for the v1.2 "Quick start" flow.
@@ -16,13 +16,13 @@ namespace RolepodWplabCompanion\Security;
  * TTL: 60 minutes. Single-use enforced atomically on redeem (delete-then-act).
  * Rate-limit: see Generate/Redeem endpoint guards.
  *
- * Token wire format: `wplab_pair_<48 hex chars>` (256 bits entropy).
+ * Token wire format: `rolepod_wp_pair_<48 hex chars>` (256 bits entropy).
  */
 final class PairToken
 {
-    public const OPTION_PREFIX = 'rolepod_wplab_pair_';
+    public const OPTION_PREFIX = 'rolepod_wp_pair_';
     public const TTL_SECONDS = 3600;
-    public const TOKEN_PREFIX = 'wplab_pair_';
+    public const TOKEN_PREFIX = 'rolepod_wp_pair_';
 
     /**
      * Issue a new token for the given admin user. Returns the raw token to

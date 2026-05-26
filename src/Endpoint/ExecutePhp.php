@@ -1,13 +1,13 @@
 <?php
 declare(strict_types=1);
 
-namespace RolepodWplabCompanion\Endpoint;
+namespace Rolepod\Wp\Endpoint;
 
-use RolepodWplabCompanion\Audit\Log;
-use RolepodWplabCompanion\Config;
-use RolepodWplabCompanion\Security\AstScreen;
-use RolepodWplabCompanion\Security\ProductionGuard;
-use RolepodWplabCompanion\Security\SessionToken;
+use Rolepod\Wp\Audit\Log;
+use Rolepod\Wp\Config;
+use Rolepod\Wp\Security\AstScreen;
+use Rolepod\Wp\Security\ProductionGuard;
+use Rolepod\Wp\Security\SessionToken;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
@@ -25,7 +25,7 @@ use WP_Error;
  *   6. AST screen approves the payload
  *
  * v0.1 ships with execute_php_enabled=false by default. Admin must explicitly
- * flip it ON via Settings → WPLab Companion. v0.2 will default to ON once
+ * flip it ON via Settings → Rolepod for WordPress. v0.2 will default to ON once
  * the audit log + AST screen have been dogfooded.
  */
 final class ExecutePhp
@@ -33,7 +33,7 @@ final class ExecutePhp
     public static function register(): void
     {
         register_rest_route(
-            ROLEPOD_WPLAB_COMPANION_NAMESPACE,
+            ROLEPOD_WP_REST_NAMESPACE,
             '/execute-php',
             [
                 'methods' => 'POST',
@@ -51,17 +51,17 @@ final class ExecutePhp
     public static function permission(WP_REST_Request $req)
     {
         if (!Config::endpointsEnabled()) {
-            return new WP_Error('rolepod_wplab_disabled', 'Companion endpoints disabled.', ['status' => 403]);
+            return new WP_Error('rolepod_wp_disabled', 'Companion endpoints disabled.', ['status' => 403]);
         }
         if (!Config::executePhpEnabled()) {
             return new WP_Error(
-                'rolepod_wplab_execute_php_disabled',
-                'execute-php endpoint is OFF (v0.1 default). Enable in Settings → WPLab Companion.',
+                'rolepod_wp_execute_php_disabled',
+                'execute-php endpoint is OFF (v0.1 default). Enable in Settings → Rolepod for WordPress.',
                 ['status' => 503]
             );
         }
         if (!current_user_can('manage_options')) {
-            return new WP_Error('rolepod_wplab_unauthorized', 'manage_options required.', ['status' => 403]);
+            return new WP_Error('rolepod_wp_unauthorized', 'manage_options required.', ['status' => 403]);
         }
         return true;
     }

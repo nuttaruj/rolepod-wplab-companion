@@ -1,8 +1,67 @@
 # Changelog
 
-All notable changes to `rolepod-wplab-companion` are documented here. Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to this plugin are documented here. Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Companion versions track `@rolepod/wplab` major version.
+Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
+
+## [2.0.0] — 2026-05-26 — Rebrand: rolepod-wp
+
+### Breaking
+
+This is a clean break. **Existing installs from v1.x must be deactivated + deleted, then `rolepod-wp` v2.0.0 installed fresh.** No in-place upgrade path is provided. Old `rolepod_wplab_companion_*` option rows are orphaned in the DB on uninstall of the v1.x plugin (the v1.x `uninstall.php` will clean them up if the user uses the WP-admin "Delete" action; deactivation alone leaves them).
+
+Why no migration code:
+- Solo project, small install base. Migration code carries its own bug surface for a one-time event.
+- v1.x `uninstall.php` already deletes its own option rows on plugin delete, so the cleanest path is "delete v1.x → install v2.0.0".
+
+### Changed — naming
+
+- **GitHub repo**: `nuttaruj/rolepod-wplab-companion` → `nuttaruj/rolepod-wp`. GitHub auto-redirects old clone URLs + browser links indefinitely; old release zips at `…/rolepod-wplab-companion-1.x.0.zip` URLs continue to resolve (under the new repo path via redirect).
+- **WP plugin slug** (directory under `wp-content/plugins/`): `rolepod-wplab-companion` → `rolepod-wp`.
+- **WP plugin bootstrap file**: `rolepod-wplab-companion.php` → `rolepod-wp.php`.
+- **WP plugin display name** (admin Plugins list): `Rolepod WPLab Companion` → `Rolepod for WordPress`.
+- **Text domain**: `rolepod-wplab-companion` → `rolepod-wp`.
+- **Admin pages**:
+  - Settings → WPLab Companion → renamed **Settings → Rolepod for WordPress** (slug `options-general.php?page=rolepod-wp`).
+  - Tools → WPLab Setup → renamed **Tools → Rolepod WP Setup** (slug `tools.php?page=rolepod-wp-setup`).
+- **PHP namespace**: `RolepodWplabCompanion\` → `Rolepod\Wp\` across all 18 PHP source files.
+- **PHP defines**: `ROLEPOD_WPLAB_COMPANION_VERSION` / `_FILE` / `_DIR` / `_NAMESPACE` → `ROLEPOD_WP_VERSION` / `_FILE` / `_DIR` / `_REST_NAMESPACE`.
+- **Option keys**: `rolepod_wplab_companion_version` → `rolepod_wp_version`; `rolepod_wplab_companion_config` → `rolepod_wp_config`; `rolepod_wplab_audit_log` → `rolepod_wp_audit_log`; pair-token rows now `rolepod_wp_pair_<hash>` (was `rolepod_wplab_pair_<hash>`); throttle keys now `rolepod_wp_pair_fail_<ip_md5>`.
+- **Pair token wire format**: prefix `wplab_pair_<hex>` → `rolepod_wp_pair_<hex>`. MCP redeems any token sent by user; no MCP-side change needed.
+- **WP_Error codes**: `rolepod_wplab_disabled` / `_unauthorized` / `_execute_php_disabled` → `rolepod_wp_*` equivalents. (Surfaced only to MCP-side error handling; not part of public API.)
+- **Filter hook for plugin_internals**: `rolepod_wplab_introspect_<slug>` → `rolepod_wp_introspect_<slug>`. Third-party integrations registering with the old filter name must rename their `add_filter()` call.
+- **Audit directory**: `wp-content/uploads/wplab-audit/` → `wp-content/uploads/rolepod-wp-audit/`. Audit-id prefix: `wplab_audit_<hex>` → `rolepod_wp_audit_<hex>`.
+- **Release asset filename**: `rolepod-wplab-companion.zip` → `rolepod-wp.zip`. Stable URL: `https://github.com/nuttaruj/rolepod-wp/releases/latest/download/rolepod-wp.zip`.
+
+### Unchanged (intentionally — preserves wire compatibility with MCP clients)
+
+- **REST namespace** stays `wplab/v1`. Path `/wp-json/wplab/v1/handshake`, `/pair/redeem`, etc. unchanged. No client config update needed beyond pointing at the new install URL.
+- All endpoint request/response JSON shapes.
+- Authentication model (WP Application Password + session token).
+- Production guard semantics. AST screen rules. Audit log entry shape.
+- App Password display name minted by Pair endpoint: `wplab-pair-<UTC-timestamp>` (already user-visible in profile.php; renaming would surprise users).
+
+### Pairs with
+
+- `@rolepod/wplab` v1.3+ (MCP-side reads `companion_version` from Pair response; `MIN_COMPANION_VERSION` = 2.0.0 on the MCP build that depends on the new slug for install URL).
+
+### Why rebrand
+
+Plugin is the WordPress arm of the broader [Rolepod ecosystem](https://github.com/nuttaruj/rolepod), parallel to `rolepod-uiproof`. The previous `rolepod-wplab-companion` name double-stamped the `wplab` brand and positioned the plugin as subordinate ("companion") rather than as the WordPress endpoint hub of the ecosystem. The new name leaves room for future Rolepod tooling to share these endpoints without a second plugin install.
+
+## [1.2.0] — 2026-05-26
+
+### Added
+
+- **REST endpoint** `POST /pair/generate` (admin only) — mints a one-time pair token (256-bit, SHA-256 at rest, 60-min TTL, max 5 active per admin).
+- **REST endpoint** `POST /pair/redeem` (public, token-authed) — atomic single-use redeem → mints WP App Password named `wplab-pair-<UTC-timestamp>` under issuing admin. Per-IP throttle: 10 failed redeems / hour.
+- **Setup Wizard quick-start** — Tools → WPLab Setup → click "⚡ Generate setup prompt" → companion builds a ready-to-paste prompt with per-CLI MCP install snippets (Claude Code / Cursor / Codex / Gemini) + `rolepod_wp_pair` call.
+
+## [1.1.0] — 2026-05-26
+
+### Added
+
+- **Setup Wizard admin page** (Tools → WPLab Setup) — manual step-by-step (App Password + npm install + claude mcp add + credentials add). Foundation for the one-click flow in v1.2.
 
 ## [1.0.0] — 2026-05-25 — Stable (schema-frozen)
 

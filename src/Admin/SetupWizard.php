@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace RolepodWplabCompanion\Admin;
+namespace Rolepod\Wp\Admin;
 
-use RolepodWplabCompanion\Security\PairToken;
+use Rolepod\Wp\Security\PairToken;
 
 /**
- * Setup Wizard — Tools → WPLab Setup.
+ * Setup Wizard — Tools → Rolepod WP Setup.
  *
  * Two paths shown on one page:
  *
@@ -26,8 +26,8 @@ final class SetupWizard
     public static function register(): void
     {
         add_management_page(
-            'WPLab Setup',
-            'WPLab Setup',
+            'Rolepod WP Setup',
+            'Rolepod WP Setup',
             'manage_options',
             self::SLUG,
             [self::class, 'render']
@@ -45,14 +45,14 @@ final class SetupWizard
         $current_user = wp_get_current_user();
         $username = $current_user instanceof \WP_User ? $current_user->user_login : 'admin';
         $appPasswordsUrl = admin_url('profile.php#application-passwords-section');
-        $companionSettingsUrl = admin_url('options-general.php?page=rolepod-wplab-companion');
+        $companionSettingsUrl = admin_url('options-general.php?page=rolepod-wp');
 
         // Quick Start handler: form post issues a fresh pair token + renders prompt.
         $pairToken = null;
         $pairExpiresAt = null;
         if (
-            isset($_POST['rolepod_wplab_generate_pair'])
-            && check_admin_referer('rolepod_wplab_generate_pair_action', 'rolepod_wplab_generate_pair_nonce')
+            isset($_POST['rolepod_wp_generate_pair'])
+            && check_admin_referer('rolepod_wp_generate_pair_action', 'rolepod_wp_generate_pair_nonce')
         ) {
             $pairToken = PairToken::issue(get_current_user_id());
             $pairExpiresAt = gmdate('Y-m-d H:i:s', time() + PairToken::ttlSeconds()) . ' UTC';
@@ -66,16 +66,16 @@ final class SetupWizard
 
         ?>
         <div class="wrap">
-            <h1>Rolepod WPLab — Setup Wizard</h1>
+            <h1>Rolepod for WordPress — Setup Wizard</h1>
             <p>Connect this WP site to any AI CLI (Claude Code / Cursor / Codex / Gemini). Pick a path below.</p>
 
             <h2 style="margin-top:32px;">⚡ Quick Start (recommended) — one-click pair</h2>
             <p>Generates a one-time pair token, then builds a ready-to-paste prompt that tells your AI to install the right plugin and connect — no manual App Password copy.</p>
 
             <form method="post">
-                <?php wp_nonce_field('rolepod_wplab_generate_pair_action', 'rolepod_wplab_generate_pair_nonce'); ?>
+                <?php wp_nonce_field('rolepod_wp_generate_pair_action', 'rolepod_wp_generate_pair_nonce'); ?>
                 <p>
-                    <button type="submit" name="rolepod_wplab_generate_pair" class="button button-primary">
+                    <button type="submit" name="rolepod_wp_generate_pair" class="button button-primary">
                         Generate setup prompt
                     </button>
                 </p>
@@ -131,8 +131,8 @@ claude mcp add rolepod-wplab -- rolepod-wplab serve</pre>
 
             <hr>
 
-            <h2>Companion endpoints</h2>
-            <p>This plugin contributes runtime introspection + execute-php (opt-in). Configure under <a href="<?php echo esc_url($companionSettingsUrl); ?>">Settings → WPLab Companion</a>.</p>
+            <h2>Plugin endpoints</h2>
+            <p>This plugin contributes runtime introspection + execute-php (opt-in). Configure under <a href="<?php echo esc_url($companionSettingsUrl); ?>">Settings → Rolepod for WordPress</a>.</p>
 
             <p><strong>Recommended:</strong></p>
             <ul style="list-style:disc;margin-left:24px;">
@@ -153,34 +153,37 @@ claude mcp add rolepod-wplab -- rolepod-wplab serve</pre>
         $lines = [];
         $lines[] = '=== rolepod-wplab one-click pair ===';
         $lines[] = '';
-        $lines[] = "I want you to connect to my WordPress site and run rolepod-wplab tools on it.";
+        $lines[] = 'I want you to connect to my WordPress site and run rolepod-wplab tools on it.';
         $lines[] = '';
         $lines[] = "Site URL: {$siteurl}";
         $lines[] = "Hostname: {$host}";
         $lines[] = "Pair token (single-use, expires in 60 min): {$pairToken}";
         $lines[] = '';
-        $lines[] = '--- Step 1: install the wplab plugin for your CLI (pick one) ---';
+        $lines[] = '--- Step 1: install rolepod-wplab on your CLI (pick the one you use) ---';
         $lines[] = '';
-        $lines[] = '* Claude Code:';
-        $lines[] = '    /plugin install nuttaruj/rolepod-wplab';
-        $lines[] = '    (bundles MCP server + skills + slash commands in one shot)';
+        $lines[] = '* Claude Code (marketplace, recommended):';
+        $lines[] = '    /plugin marketplace add nuttaruj/rolepod-wplab';
+        $lines[] = '    /plugin install rolepod-wplab@rolepod-wplab';
+        $lines[] = '    (bundles MCP server + 11 skills + slash commands; auto-runs `claude mcp add`)';
         $lines[] = '';
-        $lines[] = '* Cursor:';
+        $lines[] = '* Codex CLI (marketplace, recommended):';
+        $lines[] = '    codex plugin install github:nuttaruj/rolepod-wplab';
+        $lines[] = '    (or add MCP manually — see fallback below)';
+        $lines[] = '';
+        $lines[] = '* Cursor (manual MCP entry):';
         $lines[] = '    Settings → MCP → Add server →';
         $lines[] = '    { "command": "npx", "args": ["-y", "@rolepod/wplab", "serve"] }';
         $lines[] = '';
-        $lines[] = '* Codex CLI:';
-        $lines[] = '    Add to ~/.codex/config.toml under [mcp_servers]:';
-        $lines[] = '      [mcp_servers.rolepod-wplab]';
-        $lines[] = '      command = "npx"';
-        $lines[] = '      args = ["-y", "@rolepod/wplab", "serve"]';
-        $lines[] = '';
-        $lines[] = '* Gemini CLI:';
+        $lines[] = '* Gemini CLI (manual MCP entry):';
         $lines[] = '    Add to ~/.gemini/settings.json under mcpServers:';
         $lines[] = '      "rolepod-wplab": {';
         $lines[] = '        "command": "npx",';
         $lines[] = '        "args": ["-y", "@rolepod/wplab", "serve"]';
         $lines[] = '      }';
+        $lines[] = '';
+        $lines[] = '* Fallback (any CLI — global install):';
+        $lines[] = '    npm install -g @rolepod/wplab';
+        $lines[] = '    then register `rolepod-wplab serve` as a stdio MCP server in your CLI config.';
         $lines[] = '';
         $lines[] = '--- Step 2: pair this site using the token above ---';
         $lines[] = '';
@@ -200,7 +203,7 @@ claude mcp add rolepod-wplab -- rolepod-wplab serve</pre>
         $lines[] = '';
         $lines[] = 'After pair returns ok, run:';
         $lines[] = '';
-        $lines[] = "    rolepod_wp_health_check { \"target_id\": \"<from-step-2>\" }";
+        $lines[] = '    rolepod_wp_health_check { "target_id": "<from-step-2>" }';
         $lines[] = '';
         $lines[] = 'You should see db_ok:true, rest_ok:true, companion_ok:true. From here every';
         $lines[] = 'rolepod_wp_* tool works against this site.';
