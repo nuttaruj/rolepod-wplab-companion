@@ -18,6 +18,11 @@ if (!defined('WP_UNINSTALL_PLUGIN')) {
 delete_option('rolepod_wp_version');
 delete_option('rolepod_wp_config');
 delete_option('rolepod_wp_audit_log');
+delete_option('rolepod_wp_changes_schema_version');
+
+// Drop v2.3 change-ledger table
+require_once __DIR__ . '/src/Audit/ChangeLedger.php';
+\Rolepod\Wp\Audit\ChangeLedger::uninstall();
 
 // Remove audit log directory
 $uploadDir = wp_upload_dir();

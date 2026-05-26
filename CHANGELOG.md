@@ -4,6 +4,51 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.3.0] — 2026-05-26 — AI Change Ledger + per-change toggle + panic-revert
+
+### Added — `wp_rolepod_wp_changes` ledger table
+
+Every write the MCP issues through this companion is now captured in a custom
+table (`{prefix}rolepod_wp_changes`) with category, subcategory, before-state,
+after-state, applied flag, reversible flag, source tool, source session,
+and audit_id. Schema installs idempotently on plugin activate.
+
+### Added — 5 new REST endpoints (`/wplab/v1/changes/*`)
+
+- `POST /changes/record` — MCP records a change (session_token + manage_options auth).
+- `GET  /changes` — list/filter (category, applied, since_minutes, source_session).
+- `POST /changes/toggle` — flip one row's applied flag + run per-category dispatcher.
+- `POST /changes/toggle-bulk` — flip N rows in one call (used for bisect).
+- `POST /changes/panic` — disable every applied change in the last N minutes.
+
+### Added — per-category toggle dispatchers
+
+`Toggler::apply()` runs the right inverse per category when a row flips:
+- `hook` — wrapper-flag flip via `HookWrapper::isApplied()` (instant, zero file change).
+- `option` — `update_option($name, $before_value)` (or delete if before-state was absent).
+- `post` — `wp_update_post()` with the prior title / content / status / excerpt.
+- `layout` — `update_post_meta()` with the prior meta value (Elementor / Divi / Oxygen / Bricks JSON).
+- `file` — `file_put_contents()` with the prior content (or delete if it didn't exist).
+- `plugin` — `activate_plugin()` / `deactivate_plugins()`.
+- `theme` — `switch_theme()`.
+- `execute_php` — flagged `reversible: 0` at record time; toggle flips flag but cannot replay inverse.
+
+### Added — Tools → Rolepod WP Changes admin page
+
+Hand-rolled list table with tabs (All / Hooks / Content / Options / Layouts / Files / Plugins / Themes / execute-php), bulk-select checkboxes, per-row Disable/Re-enable buttons, and a 🚨 panic-disable button with a window selector (10 min / 1 hour / 24 hours).
+
+### Added — `HookWrapper` helper
+
+AI-issued hook callbacks emitted by `wp-scaffold` are wrapped in:
+```php
+if (!\Rolepod\Wp\Audit\HookWrapper::isApplied('<audit_id>')) return;
+```
+Per-request cache so many wrapped callbacks on the same hook share one DB read.
+
+### Pairs with
+
+- `@rolepod/wplab` v1.6.0 — adds `Bridge.recordChange/queryChanges/toggleChange/toggleChangesBulk/panicChanges` + 4 MCP tools (`rolepod_wp_changes_{query,toggle,toggle_bulk,panic}`) + auto-ledger wrappers on writer tools (post_update, post_create, option_set, file_write) + the new `wp-changes` skill.
+
 ## [2.1.0] — 2026-05-26 — Shared-host fix + auto-bootstrap wp-cli
 
 ### Fixed
