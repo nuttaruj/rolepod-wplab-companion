@@ -3,14 +3,21 @@ declare(strict_types=1);
 
 namespace RolepodWplabCompanion\Admin;
 
+use RolepodWplabCompanion\Security\PairToken;
+
 /**
- * Setup Wizard — copy-paste install snippets for users who haven't set up
- * the Node MCP yet. Lives under Tools → WPLab Setup so it's easy to find.
+ * Setup Wizard — Tools → WPLab Setup.
  *
- * Shows three blocks:
- *   1. Site URL + REST namespace (for ROLEPOD_WPLAB sanity checks)
- *   2. Claude Code / Cursor / Codex / Gemini install commands
- *   3. App Password creation reminder + link
+ * Two paths shown on one page:
+ *
+ *   Quick Start (v1.2) — admin clicks "Generate setup prompt"; companion mints
+ *     a one-time pair token + builds a ready-to-paste prompt that includes
+ *     CLI-specific plugin install snippets + the rolepod_wp_pair call.
+ *     The AI of choice executes the prompt and auto-pairs.
+ *
+ *   Manual — original v1.1 step-by-step (App Password + npm install + claude
+ *     mcp add + credentials add). Kept for users who don't want the plugin
+ *     install flow or are using a CLI that doesn't have a wplab plugin.
  */
 final class SetupWizard
 {
@@ -37,8 +44,19 @@ final class SetupWizard
         $host = (string) wp_parse_url($siteurl, PHP_URL_HOST);
         $current_user = wp_get_current_user();
         $username = $current_user instanceof \WP_User ? $current_user->user_login : 'admin';
-
         $appPasswordsUrl = admin_url('profile.php#application-passwords-section');
+        $companionSettingsUrl = admin_url('options-general.php?page=rolepod-wplab-companion');
+
+        // Quick Start handler: form post issues a fresh pair token + renders prompt.
+        $pairToken = null;
+        $pairExpiresAt = null;
+        if (
+            isset($_POST['rolepod_wplab_generate_pair'])
+            && check_admin_referer('rolepod_wplab_generate_pair_action', 'rolepod_wplab_generate_pair_nonce')
+        ) {
+            $pairToken = PairToken::issue(get_current_user_id());
+            $pairExpiresAt = gmdate('Y-m-d H:i:s', time() + PairToken::ttlSeconds()) . ' UTC';
+        }
 
         $mcpCommand = sprintf(
             'rolepod-wplab credentials add %s --username=%s',
@@ -49,55 +67,145 @@ final class SetupWizard
         ?>
         <div class="wrap">
             <h1>Rolepod WPLab — Setup Wizard</h1>
-            <p>Five-minute setup. Connect this WP site to a Node MCP that any AI CLI (Claude Code, Cursor, Codex, Gemini) can talk to.</p>
+            <p>Connect this WP site to any AI CLI (Claude Code / Cursor / Codex / Gemini). Pick a path below.</p>
 
-            <h2>Step 1 — Create an Application Password</h2>
+            <h2 style="margin-top:32px;">⚡ Quick Start (recommended) — one-click pair</h2>
+            <p>Generates a one-time pair token, then builds a ready-to-paste prompt that tells your AI to install the right plugin and connect — no manual App Password copy.</p>
+
+            <form method="post">
+                <?php wp_nonce_field('rolepod_wplab_generate_pair_action', 'rolepod_wplab_generate_pair_nonce'); ?>
+                <p>
+                    <button type="submit" name="rolepod_wplab_generate_pair" class="button button-primary">
+                        Generate setup prompt
+                    </button>
+                </p>
+            </form>
+
+            <?php if ($pairToken !== null): ?>
+                <?php $prompt = self::buildPrompt($siteurl, $host, $pairToken); ?>
+                <p><strong>Pair token (expires <?php echo esc_html($pairExpiresAt); ?>):</strong></p>
+                <p><code style="user-select:all;"><?php echo esc_html($pairToken); ?></code></p>
+
+                <p><strong>Copy this prompt into your AI CLI (Claude Code / Cursor / Codex / Gemini):</strong></p>
+                <textarea id="wplab-pair-prompt" readonly rows="22" style="width:100%;font-family:Menlo,monospace;font-size:12px;"><?php echo esc_textarea($prompt); ?></textarea>
+                <p>
+                    <button type="button" class="button" onclick="(function(){var t=document.getElementById('wplab-pair-prompt');t.select();document.execCommand('copy');})();">
+                        Copy prompt to clipboard
+                    </button>
+                </p>
+                <p class="description">
+                    The token is <strong>single-use</strong> and expires in 60 minutes. On redeem the companion mints an Application Password named <code>wplab-pair-&lt;timestamp&gt;</code> — revocable from <a href="<?php echo esc_url($appPasswordsUrl); ?>">profile.php</a> if you change your mind.
+                </p>
+            <?php endif; ?>
+
+            <hr style="margin:40px 0;">
+
+            <h2>Manual setup (alternative)</h2>
+            <p>Use this if your AI CLI does not have a wplab plugin yet, or you prefer to set up credentials yourself.</p>
+
+            <h3>Step 1 — Create an Application Password</h3>
             <ol>
                 <li>Open <a href="<?php echo esc_url($appPasswordsUrl); ?>"><?php echo esc_html($appPasswordsUrl); ?></a></li>
                 <li>Name the password <code>rolepod-wplab</code> and click <strong>Add New Application Password</strong>.</li>
                 <li>Copy the password — you will only see it once.</li>
             </ol>
-            <p class="description">Application Passwords are revocable. If anything goes wrong you can delete it from the same screen.</p>
 
-            <h2>Step 2 — Install the Node MCP locally</h2>
+            <h3>Step 2 — Install the Node MCP locally</h3>
             <pre style="background:#f1f1f1;padding:12px;overflow:auto;">
-npm install -g @rolepod/wplab          # one-time install
-rolepod-wplab doctor                   # sanity-check your environment</pre>
+npm install -g @rolepod/wplab
+rolepod-wplab doctor</pre>
 
-            <h2>Step 3 — Register this site as a target</h2>
+            <h3>Step 3 — Register this site as a target</h3>
             <pre style="background:#f1f1f1;padding:12px;overflow:auto;">
 <?php echo esc_html($mcpCommand); ?></pre>
             <p class="description">When prompted, paste the Application Password from Step 1.</p>
 
-            <h2>Step 4 — Wire the MCP into your AI CLI</h2>
-
-            <h3>Claude Code</h3>
+            <h3>Step 4 — Wire the MCP into your AI CLI</h3>
+            <p>Claude Code:</p>
             <pre style="background:#f1f1f1;padding:12px;overflow:auto;">
 claude mcp add rolepod-wplab -- rolepod-wplab serve</pre>
-
-            <h3>Cursor</h3>
-            <p>Open Settings → MCP → "Add server" and paste:</p>
+            <p>Cursor: Settings → MCP → "Add server":</p>
             <pre style="background:#f1f1f1;padding:12px;overflow:auto;">
 { "command": "rolepod-wplab", "args": ["serve"] }</pre>
-
-            <h3>Codex / Gemini CLI</h3>
-            <p>Add the equivalent stdio MCP server entry per each CLI's docs. The binary is <code>rolepod-wplab serve</code>.</p>
-
-            <h2>Step 5 — Smoke test from your AI CLI</h2>
-            <p>Ask your AI: <em>"Connect to <?php echo esc_html($host); ?> and run health_check."</em></p>
-            <p>You should see <code>db_ok:true, wp_cli_ok:false, rest_ok:true, companion_ok:true</code>.</p>
+            <p>Codex / Gemini: add equivalent stdio MCP entry per each CLI's docs. Binary: <code>rolepod-wplab serve</code>.</p>
 
             <hr>
 
             <h2>Companion endpoints</h2>
-            <p>This plugin contributes runtime introspection + execute-php (opt-in). Configure under <a href="<?php echo esc_url(admin_url('options-general.php?page=rolepod-wplab-companion')); ?>">Settings → WPLab Companion</a>.</p>
+            <p>This plugin contributes runtime introspection + execute-php (opt-in). Configure under <a href="<?php echo esc_url($companionSettingsUrl); ?>">Settings → WPLab Companion</a>.</p>
 
-            <p><strong>Optional steps:</strong></p>
+            <p><strong>Recommended:</strong></p>
             <ul style="list-style:disc;margin-left:24px;">
                 <li>Turn ON <em>Enable companion REST endpoints</em> only when you actively use the MCP.</li>
                 <li>Add this site's hostname to <em>Production hostnames</em> if it serves real visitors — protects you from accidental execute-php.</li>
             </ul>
         </div>
         <?php
+    }
+
+    /**
+     * Build the ready-to-paste setup prompt.
+     * Includes Claude Code / Cursor / Codex / Gemini CLI install snippets +
+     * the rolepod_wp_pair MCP call with siteurl + pair_token baked in.
+     */
+    private static function buildPrompt(string $siteurl, string $host, string $pairToken): string
+    {
+        $lines = [];
+        $lines[] = '=== rolepod-wplab one-click pair ===';
+        $lines[] = '';
+        $lines[] = "I want you to connect to my WordPress site and run rolepod-wplab tools on it.";
+        $lines[] = '';
+        $lines[] = "Site URL: {$siteurl}";
+        $lines[] = "Hostname: {$host}";
+        $lines[] = "Pair token (single-use, expires in 60 min): {$pairToken}";
+        $lines[] = '';
+        $lines[] = '--- Step 1: install the wplab plugin for your CLI (pick one) ---';
+        $lines[] = '';
+        $lines[] = '* Claude Code:';
+        $lines[] = '    /plugin install nuttaruj/rolepod-wplab';
+        $lines[] = '    (bundles MCP server + skills + slash commands in one shot)';
+        $lines[] = '';
+        $lines[] = '* Cursor:';
+        $lines[] = '    Settings → MCP → Add server →';
+        $lines[] = '    { "command": "npx", "args": ["-y", "@rolepod/wplab", "serve"] }';
+        $lines[] = '';
+        $lines[] = '* Codex CLI:';
+        $lines[] = '    Add to ~/.codex/config.toml under [mcp_servers]:';
+        $lines[] = '      [mcp_servers.rolepod-wplab]';
+        $lines[] = '      command = "npx"';
+        $lines[] = '      args = ["-y", "@rolepod/wplab", "serve"]';
+        $lines[] = '';
+        $lines[] = '* Gemini CLI:';
+        $lines[] = '    Add to ~/.gemini/settings.json under mcpServers:';
+        $lines[] = '      "rolepod-wplab": {';
+        $lines[] = '        "command": "npx",';
+        $lines[] = '        "args": ["-y", "@rolepod/wplab", "serve"]';
+        $lines[] = '      }';
+        $lines[] = '';
+        $lines[] = '--- Step 2: pair this site using the token above ---';
+        $lines[] = '';
+        $lines[] = 'Once the MCP is available, call:';
+        $lines[] = '';
+        $lines[] = '    rolepod_wp_pair {';
+        $lines[] = "      \"siteurl\": \"{$siteurl}\",";
+        $lines[] = "      \"pair_token\": \"{$pairToken}\"";
+        $lines[] = '    }';
+        $lines[] = '';
+        $lines[] = 'The pair tool will:';
+        $lines[] = '  - exchange the token for a real WP Application Password (companion-minted)';
+        $lines[] = '  - store the credential in the local vault (OS keychain when available)';
+        $lines[] = '  - open a Target and return target_id + capability list';
+        $lines[] = '';
+        $lines[] = '--- Step 3: confirm + start working ---';
+        $lines[] = '';
+        $lines[] = 'After pair returns ok, run:';
+        $lines[] = '';
+        $lines[] = "    rolepod_wp_health_check { \"target_id\": \"<from-step-2>\" }";
+        $lines[] = '';
+        $lines[] = 'You should see db_ok:true, rest_ok:true, companion_ok:true. From here every';
+        $lines[] = 'rolepod_wp_* tool works against this site.';
+        $lines[] = '';
+        $lines[] = '=== end ===';
+        return implode("\n", $lines);
     }
 }
