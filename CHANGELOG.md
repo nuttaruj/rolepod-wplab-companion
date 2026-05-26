@@ -4,6 +4,52 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.4.0] — 2026-05-27 — Theme safety: syntax-check + theme snapshot/restore
+
+### Added — `POST /wplab/v1/syntax-check`
+
+Server-side validator that the MCP-side `file_write` calls BEFORE committing a
+PHP or JSON payload. Eliminates the worst class of theme regression: bad PHP
+in functions.php (White Screen of Death on every request) and bad JSON in
+theme.json (Site Editor white-page).
+
+- PHP: writes the payload to a temp file with `.php` extension, runs
+  `php -l <file>` via exec(), parses stdout for "Parse error" / "syntax
+  error", returns line number from "on line N".
+- JSON: pure `json_decode` + `json_last_error_msg()`, line number from
+  offset.
+- Refuses with `EXEC_DISABLED` 503 if the host blocks `exec()`; MCP falls
+  back gracefully to writing without server validation.
+
+### Added — `POST /wplab/v1/theme/snapshot` + `POST /wplab/v1/theme/restore`
+
+Companion-side tar/untar of theme directories under
+`wp-content/uploads/rolepod-wp-theme-snapshots/`. Uses PHP `PharData`
+(built-in, no composer). Restore validates the snapshot path is inside the
+managed dir to prevent arbitrary-path extract attacks.
+
+Used by the MCP-side `wp_theme_switch_safe` composite tool: snapshot the
+CURRENT theme dir → wp-cli theme activate → post-switch health probe →
+auto-rollback (re-activate old + untar snapshot) if the new theme breaks
+the frontend.
+
+### Pairs with
+
+- `@rolepod/wplab` v1.7.0 — adds:
+  - `Bridge.syntaxCheck/themeSnapshot/themeRestore` methods.
+  - `wp_file_write` pre-write validators (`.php` → companion syntax-check;
+    `.json` → Node-side JSON.parse).
+  - `wp_theme_snapshot` + `wp_theme_restore` MCP tools.
+  - `wp_child_theme_create` composite — parent → child scaffolding.
+  - `wp_theme_switch_safe` composite — snapshot + activate + auto-rollback.
+  - `wp_session_start` — issues `source_session` id; auto-threads via env into
+    all auto-ledger writes so multi-file work is atomically revertable.
+  - Auto cache flush after `theme.json` and `/wp/v2/global-styles/<id>` writes.
+  - Auto-ledger on `rest_request` global-styles writes (before-state captured
+    via GET first).
+  - New `wp-edit-theme` skill (13th); `wp-edit-design` scope narrows to
+    page-builders only.
+
 ## [2.3.1] — 2026-05-26 — Auto-install ledger schema on upgrade
 
 ### Fixed
