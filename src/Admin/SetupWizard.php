@@ -21,7 +21,7 @@ use Rolepod\Wp\Security\PairToken;
  */
 final class SetupWizard
 {
-    private const SLUG = 'rolepod-wplab-setup';
+    private const SLUG = 'rolepod-wp-setup';
 
     public static function register(): void
     {
