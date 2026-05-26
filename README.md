@@ -17,25 +17,31 @@ Install **only if** you want any of:
 
 For scaffold / audit / health / file-write workflows, the Node MCP (`@rolepod/wplab`) is enough on its own.
 
-## Install (v0.1+)
+## Install
+
+**Option 1 — one-liner (v1.2+):**
 
 ```bash
-# Download latest release zip:
-curl -L -o /tmp/rolepod-wplab-companion.zip \
-  https://github.com/nuttaruj/rolepod-wplab-companion/releases/latest/download/rolepod-wplab-companion.zip
-
-# Install via wp-cli (or upload via WP admin → Plugins → Add New → Upload):
-wp --path=<path-to-your-wp-install> plugin install /tmp/rolepod-wplab-companion.zip --activate
-
-# Toggle endpoints ON via WP admin → Settings → WPLab Companion.
+wp --path=<your-wp> plugin install \
+  https://github.com/nuttaruj/rolepod-wplab-companion/releases/latest/download/rolepod-wplab-companion-1.2.0.zip \
+  --activate
 ```
 
-Then from the Node MCP side:
+**Option 2 — WP admin upload:**
+
+1. Download the `rolepod-wplab-companion-<version>.zip` from the [latest release](https://github.com/nuttaruj/rolepod-wplab-companion/releases/latest).
+2. WP admin → Plugins → Add New → **Upload Plugin** → pick the zip → Activate.
+
+**After activation:**
+
+1. Settings → WPLab Companion → toggle **Enable companion REST endpoints**.
+2. Tools → **WPLab Setup** → click **⚡ Generate setup prompt** (v1.2+).
+3. Paste the prompt into your AI CLI — done. (Or follow the manual setup section if you prefer to install + pair by hand.)
+
+**Verify from the MCP side:**
 
 ```bash
 rolepod-wplab doctor    # companion handshake should report 200 OK
-export ROLEPOD_WPLAB_PROFILE=power
-# reconnect target — power tools register
 ```
 
 ## Architecture
