@@ -22,7 +22,7 @@ if (defined('ROLEPOD_WP_GUARDIAN_VERSION')) {
     // Another copy already loaded — don't double-register.
     return;
 }
-define('ROLEPOD_WP_GUARDIAN_VERSION', '2.7.1');
+define('ROLEPOD_WP_GUARDIAN_VERSION', '2.7.2');
 define('ROLEPOD_WP_GUARDIAN_NAMESPACE', 'wplab-recovery/v1');
 define('ROLEPOD_WP_GUARDIAN_FATALS_TRANSIENT', 'rolepod_wp_recovery_recent_fatals');
 define('ROLEPOD_WP_GUARDIAN_SAFE_MODE_OPTION', 'rolepod_wp_safe_mode');
@@ -349,14 +349,15 @@ function rolepod_guardian_restore_snapshot(WP_REST_Request $req): WP_REST_Respon
         return new WP_REST_Response(['ok' => false, 'error_code' => 'INVALID_SNAPSHOT'], 400);
     }
 
-    // Filename convention: <slug>-<utc-ts>.tar.gz — extract slug.
-    $base = basename($abs, '.tar.gz');
-    $parts = explode('-', $base);
-    array_pop($parts); // drop ts
-    $slug = implode('-', $parts);
-    if ($slug === '') {
-        return new WP_REST_Response(['ok' => false, 'error_code' => 'CANNOT_DERIVE_SLUG'], 400);
+    // Filename convention: <slug>-YYYYMMDD-HHMMSS.tar.gz — ts contains a
+    // hyphen between date and time, so naive explode('-') + array_pop()
+    // strips only the time half. Use the same regex as the main companion
+    // ThemeSnapshot::restore() to capture slug greedily before the ts.
+    $base = basename($abs);
+    if (!preg_match('/^([a-zA-Z0-9_\-]+)-\d{8}-\d{6}\.tar\.gz$/', $base, $m)) {
+        return new WP_REST_Response(['ok' => false, 'error_code' => 'SNAPSHOT_NAME_MALFORMED'], 400);
     }
+    $slug = $m[1];
 
     $themesDir = WP_CONTENT_DIR . '/themes';
     $target = $themesDir . '/' . $slug;

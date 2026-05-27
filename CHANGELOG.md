@@ -82,6 +82,12 @@ happens. WP's own WSOD-protection (5.2+ Recovery Mode) uses the same
 trick — we extend it with a REST recovery channel instead of email-based
 recovery links.
 
+## [2.7.2] — 2026-05-27 — Guardian restore_snapshot slug parser fixed for ts-with-hyphen
+
+Round 6 stress test exposed: guardian's `/restore-snapshot` extracted to wrong dir `<slug>-<date>/` when snapshot filename was `<slug>-YYYYMMDD-HHMMSS.tar.gz`. The naive `explode('-') + array_pop()` only stripped the `HHMMSS` half, leaving the `YYYYMMDD` as part of the slug.
+
+Fix: replace explode/pop with the same regex used by the main companion ThemeSnapshot::restore — `^([a-zA-Z0-9_\-]+)-\d{8}-\d{6}\.tar\.gz$`. Greedy slug capture before `-YYYYMMDD-HHMMSS`. Returns `SNAPSHOT_NAME_MALFORMED` if filename doesn't match the pattern.
+
 ## [2.7.1] — 2026-05-27 — `wp-content/uploads/wplab-tmp/` auto-mkdir + new `/db-query` endpoint
 
 Closes 2 of 3 sub-gaps surfaced during MCP v1.10.1 retest.
