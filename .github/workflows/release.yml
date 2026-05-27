@@ -28,6 +28,8 @@ jobs:
           test -f dist/rolepod-wp.zip
           unzip -l dist/rolepod-wp.zip | grep -q 'rolepod-wp.php'
           unzip -l dist/rolepod-wp.zip | grep -q 'src/Endpoint/Pair.php'
+          unzip -l dist/rolepod-wp.zip | grep -q 'assets/admin.css'
+          unzip -l dist/rolepod-wp.zip | grep -q 'assets/admin.js'
 
       - name: Ensure release exists for this tag
         env:

@@ -8,19 +8,14 @@ use Rolepod\Wp\Audit\Toggler;
 use Rolepod\Wp\Audit\HookWrapper;
 
 /**
- * Tools → Rolepod WP → Change Ledger
+ * Change Ledger page — top-level submenu "Change Ledger".
  *
  * Surfaces every AI-issued change recorded by the MCP. Tabs by category,
- * bulk-action checkboxes for disable/re-enable, panic button to disable all
- * changes in the last N minutes.
- *
- * Bypasses the WP_List_Table class on purpose — the surface is simple enough
- * that a hand-rolled table is shorter + easier to maintain than the WP class
- * with its many overridable methods.
+ * bulk-action checkboxes for disable/re-enable, panic button to disable
+ * all changes in the last N minutes, stat tiles at the top.
  */
 final class ChangeLedgerPage
 {
-    private const SLUG = 'rolepod-wp-changes';
     private const NONCE_ACTION = 'rolepod_wp_changes_action';
 
     private const CATEGORIES = [
@@ -35,16 +30,7 @@ final class ChangeLedgerPage
         'execute_php' => 'execute-php',
     ];
 
-    public static function register(): void
-    {
-        add_management_page(
-            'Rolepod WP — Change Ledger',
-            'Rolepod WP Changes',
-            'manage_options',
-            self::SLUG,
-            [self::class, 'render']
-        );
-    }
+    public static function register(): void { /* registered via Menu::register() */ }
 
     public static function render(): void
     {
@@ -65,103 +51,167 @@ final class ChangeLedgerPage
         }
         $rows = ChangeRecorder::query($filters);
 
+        $totals = self::computeTotals();
+
+        Shell::open(Menu::SLUG_CHANGES);
+
+        if ($notice !== null) {
+            echo '<div class="notice notice-' . esc_attr($notice['type']) . ' is-dismissible"><p>' . esc_html($notice['message']) . '</p></div>';
+        }
+
         ?>
-        <div class="wrap">
-            <h1>Rolepod WP — Change Ledger</h1>
-            <p>Every write the MCP issued through this companion. Disable a row to revert that change; re-enable to re-apply. Use the panic button below to disable every change in a time window at once.</p>
 
-            <?php if ($notice !== null): ?>
-                <div class="notice notice-<?php echo esc_attr($notice['type']); ?> is-dismissible">
-                    <p><?php echo esc_html($notice['message']); ?></p>
-                </div>
-            <?php endif; ?>
-
-            <h2 class="nav-tab-wrapper">
-                <?php foreach (self::CATEGORIES as $key => $label): ?>
-                    <?php $count = self::countForCategory($key); ?>
-                    <a href="<?php echo esc_url(add_query_arg(['page' => self::SLUG, 'cat' => $key], admin_url('tools.php'))); ?>"
-                       class="nav-tab <?php echo $activeTab === $key ? 'nav-tab-active' : ''; ?>">
-                        <?php echo esc_html($label); ?> (<?php echo (int) $count; ?>)
-                    </a>
-                <?php endforeach; ?>
-            </h2>
-
-            <form method="post" style="margin-top:16px;">
+        <!-- Intro + panic -->
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:14px;flex-wrap:wrap;">
+            <div style="font-size:13px;color:var(--rp-text-muted);max-width:680px;line-height:1.6;">
+                Every write the MCP issues passes through this ledger. Disable a row to revert that change; re-enable to re-apply. Use <strong>panic disable</strong> to revert everything in a time window at once.
+            </div>
+            <form method="post" style="margin:0;">
                 <?php wp_nonce_field(self::NONCE_ACTION, 'rolepod_wp_changes_nonce'); ?>
                 <input type="hidden" name="cat" value="<?php echo esc_attr($activeTab); ?>">
+                <div class="rp-panic">
+                    <div class="rp-panic-icon" aria-hidden="true"><?php echo self::iconBomb(); ?></div>
+                    <div class="rp-panic-text">
+                        <strong>Panic disable</strong>
+                        <small>Revert everything in the last…</small>
+                    </div>
+                    <select name="panic_minutes">
+                        <option value="10">10 min</option>
+                        <option value="60">1 hour</option>
+                        <option value="1440">24 hours</option>
+                    </select>
+                    <button type="submit" name="panic_submit" value="1" class="rp-btn rp-btn-sm rp-btn-danger" data-rp-confirm="Disable every change in this window? This reverts AI-issued writes from before the window started.">Disable</button>
+                </div>
+            </form>
+        </div>
 
-                <div class="tablenav top">
-                    <div class="alignleft actions bulkactions">
-                        <select name="bulk_action">
+        <!-- Stat tiles -->
+        <div class="rp-stat-grid">
+            <div class="rp-stat"><div class="rp-stat-icon t-accent"><?php echo self::iconActivity(); ?></div><div><div class="rp-stat-label">Total changes</div><div class="rp-stat-value"><?php echo (int) $totals['total']; ?></div></div></div>
+            <div class="rp-stat"><div class="rp-stat-icon t-success"><?php echo self::iconCheck(); ?></div><div><div class="rp-stat-label">Active</div><div class="rp-stat-value"><?php echo (int) $totals['active']; ?></div></div></div>
+            <div class="rp-stat"><div class="rp-stat-icon t-neutral"><?php echo self::iconMinus(); ?></div><div><div class="rp-stat-label">Disabled</div><div class="rp-stat-value"><?php echo (int) $totals['disabled']; ?></div></div></div>
+            <div class="rp-stat"><div class="rp-stat-icon t-warning"><?php echo self::iconAlert(); ?></div><div><div class="rp-stat-label">Non-reversible</div><div class="rp-stat-value"><?php echo (int) $totals['non_reversible']; ?></div></div></div>
+        </div>
+
+        <!-- Category tabs -->
+        <div class="rp-subnav" style="margin-bottom:14px;">
+            <?php foreach (self::CATEGORIES as $key => $label): ?>
+                <?php $count = self::countForCategory($key); ?>
+                <a class="<?php echo $activeTab === $key ? 'is-active' : ''; ?>" href="<?php echo esc_url(add_query_arg(['page' => Menu::SLUG_CHANGES, 'cat' => $key], admin_url('admin.php'))); ?>">
+                    <?php echo esc_html($label); ?>
+                    <?php if ($count > 0): ?><span class="rp-count"><?php echo (int) $count; ?></span><?php endif; ?>
+                </a>
+            <?php endforeach; ?>
+        </div>
+
+        <!-- Toolbar + table -->
+        <form method="post" style="margin:0;">
+            <?php wp_nonce_field(self::NONCE_ACTION, 'rolepod_wp_changes_nonce'); ?>
+            <input type="hidden" name="cat" value="<?php echo esc_attr($activeTab); ?>">
+
+            <div class="rp-card" style="overflow:hidden;margin-bottom:0;">
+                <div class="rp-toolbar">
+                    <div style="display:flex;align-items:center;gap:10px;flex:1;flex-wrap:wrap;">
+                        <input type="search" data-rp-search=".rp-ledger-row" class="rp-input" placeholder="Filter by target, source, or description&hellip;" style="max-width:320px;font-size:12.5px;">
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <select name="bulk_action" class="rp-input" style="width:auto;font-size:12.5px;">
                             <option value="">Bulk actions</option>
                             <option value="disable">Disable selected</option>
                             <option value="enable">Re-enable selected</option>
                         </select>
-                        <button type="submit" class="button">Apply</button>
-                    </div>
-                    <div class="alignright">
-                        <label>Panic — disable everything in the last
-                            <select name="panic_minutes">
-                                <option value="10">10 min</option>
-                                <option value="60">1 hour</option>
-                                <option value="1440">24 hours</option>
-                            </select>
-                            <button type="submit" name="panic_submit" value="1" class="button button-secondary" onclick="return confirm('Disable every change in this window? This reverts AI-issued writes to before the window started.');">🚨 Panic disable</button>
-                        </label>
+                        <button type="submit" class="rp-btn rp-btn-sm">Apply</button>
                     </div>
                 </div>
 
-                <table class="widefat striped">
-                    <thead>
-                        <tr>
-                            <td class="manage-column column-cb check-column"><input type="checkbox" id="ledger-cb-all" onclick="document.querySelectorAll('input[name=\\'ids[]\\']').forEach(function(c){c.checked=this.checked;}.bind(this));"></td>
-                            <th>ID</th>
-                            <th>When (UTC)</th>
-                            <th>Category</th>
-                            <th>Target</th>
-                            <th>Source tool</th>
-                            <th>Status</th>
-                            <th>Reversible</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($rows)): ?>
-                            <tr><td colspan="9"><em>No changes recorded yet.</em></td></tr>
-                        <?php else: foreach ($rows as $row): ?>
+                <?php if (empty($rows)): ?>
+                    <div style="padding:36px 18px;text-align:center;color:var(--rp-text-muted);font-size:13px;">
+                        No changes recorded yet.
+                    </div>
+                <?php else: ?>
+                    <table class="rp-ledger-table">
+                        <thead>
                             <tr>
-                                <td class="check-column"><input type="checkbox" name="ids[]" value="<?php echo (int) $row['id']; ?>"></td>
-                                <td>#<?php echo (int) $row['id']; ?></td>
-                                <td><?php echo esc_html((string) $row['created_at']); ?></td>
-                                <td>
-                                    <code><?php echo esc_html((string) $row['category']); ?></code><br>
-                                    <small><?php echo esc_html((string) $row['subcategory']); ?></small>
-                                </td>
-                                <td><?php echo esc_html((string) $row['target_descriptor']); ?></td>
-                                <td><small><code><?php echo esc_html((string) ($row['source_tool'] ?? '')); ?></code></small></td>
-                                <td>
-                                    <?php if ((int) $row['applied'] === 1): ?>
-                                        <span style="color:#1a7f37;font-weight:600;">● Applied</span>
-                                    <?php else: ?>
-                                        <span style="color:#9a3412;font-weight:600;">○ Disabled</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td><?php echo (int) $row['reversible'] === 1 ? '✓' : '⚠️'; ?></td>
-                                <td>
-                                    <?php
-                                    $isApplied = (int) $row['applied'] === 1;
-                                    $toggleAction = $isApplied ? 'disable_one' : 'enable_one';
-                                    $toggleLabel = $isApplied ? 'Disable' : 'Re-enable';
-                                    ?>
-                                    <button type="submit" name="<?php echo esc_attr($toggleAction); ?>" value="<?php echo (int) $row['id']; ?>" class="button button-small"><?php echo esc_html($toggleLabel); ?></button>
-                                </td>
+                                <th class="col-check"><input type="checkbox" data-rp-toggle-all="ledger"></th>
+                                <th class="col-id">ID</th>
+                                <th class="col-when">When (UTC)</th>
+                                <th class="col-cat">Category</th>
+                                <th>Target</th>
+                                <th class="col-source">Source</th>
+                                <th class="col-status">Status</th>
+                                <th class="col-rev">Rev</th>
+                                <th class="col-actions"></th>
                             </tr>
-                        <?php endforeach; endif; ?>
-                    </tbody>
-                </table>
-            </form>
-        </div>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($rows as $row): ?>
+                                <?php
+                                $isApplied = (int) $row['applied'] === 1;
+                                $isReversible = (int) $row['reversible'] === 1;
+                                $target = (string) ($row['target_descriptor'] ?? '');
+                                $targetKey = (string) ($row['subcategory'] ?? '');
+                                $source = (string) ($row['source_tool'] ?? '');
+                                $hay = strtolower($target . ' ' . $targetKey . ' ' . $source);
+                                ?>
+                                <tr class="rp-ledger-row<?php echo $isApplied ? '' : ' is-disabled'; ?>" data-rp-haystack="<?php echo esc_attr($hay); ?>">
+                                    <td class="col-check"><input type="checkbox" name="ids[]" value="<?php echo (int) $row['id']; ?>" data-rp-group="ledger"></td>
+                                    <td class="col-id">#<?php echo (int) $row['id']; ?></td>
+                                    <td class="col-when rp-mono" style="font-size:11.5px;color:var(--rp-text-muted);">
+                                        <?php echo esc_html((string) $row['created_at']); ?>
+                                    </td>
+                                    <td class="col-cat">
+                                        <span class="rp-badge rp-badge-<?php echo esc_attr(self::categoryTone((string) $row['category'])); ?>"><?php echo esc_html((string) $row['category']); ?></span>
+                                    </td>
+                                    <td class="col-target">
+                                        <div><?php echo esc_html($target); ?></div>
+                                        <?php if ($targetKey !== ''): ?><small><?php echo esc_html($targetKey); ?></small><?php endif; ?>
+                                    </td>
+                                    <td class="col-source"><span class="rp-chip"><?php echo esc_html($source); ?></span></td>
+                                    <td class="col-status">
+                                        <?php if ($isApplied): ?>
+                                            <span class="rp-badge rp-badge-success"><span class="rp-bd"></span>Active</span>
+                                        <?php else: ?>
+                                            <span class="rp-badge rp-badge-neutral"><span class="rp-bd"></span>Disabled</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="col-rev"><?php echo $isReversible ? '<span style="color:var(--rp-success);">&#10003;</span>' : '<span style="color:var(--rp-warning-text);" title="Not reversible">!</span>'; ?></td>
+                                    <td class="col-actions">
+                                        <?php if ($isReversible): ?>
+                                            <?php $toggleAction = $isApplied ? 'disable_one' : 'enable_one'; ?>
+                                            <?php $toggleLabel = $isApplied ? 'Disable' : 'Re-enable'; ?>
+                                            <button type="submit" name="<?php echo esc_attr($toggleAction); ?>" value="<?php echo (int) $row['id']; ?>" class="rp-btn rp-btn-sm"><?php echo esc_html($toggleLabel); ?></button>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+            </div>
+        </form>
+
         <?php
+        Shell::close();
+    }
+
+    private static function computeTotals(): array
+    {
+        global $wpdb;
+        $table = \Rolepod\Wp\Audit\ChangeLedger::tableName();
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+        $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+        $active = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE applied = 1");
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+        $disabled = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE applied = 0");
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+        $nonRev = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE reversible = 0");
+        return [
+            'total' => $total,
+            'active' => $active,
+            'disabled' => $disabled,
+            'non_reversible' => $nonRev,
+        ];
     }
 
     private static function countForCategory(string $category): int
@@ -176,10 +226,16 @@ final class ChangeLedgerPage
         return (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE category = %s", $category));
     }
 
-    /**
-     * Handle POST: bulk action OR single toggle OR panic. Returns notice
-     * array or null.
-     */
+    private static function categoryTone(string $cat): string
+    {
+        $map = [
+            'option' => 'accent', 'hook' => 'info', 'post' => 'success',
+            'layout' => 'warning', 'file' => 'neutral', 'plugin' => 'accent',
+            'theme' => 'info', 'execute_php' => 'danger',
+        ];
+        return $map[$cat] ?? 'neutral';
+    }
+
     private static function handlePost(): ?array
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -256,5 +312,27 @@ final class ChangeLedgerPage
             'type' => $result['ok'] ? 'success' : 'warning',
             'message' => "Change #{$id} {$verb}. " . ($detail !== '' ? "({$detail})" : ''),
         ];
+    }
+
+    // Inline SVG icons.
+    private static function iconActivity(): string
+    {
+        return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>';
+    }
+    private static function iconCheck(): string
+    {
+        return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>';
+    }
+    private static function iconMinus(): string
+    {
+        return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>';
+    }
+    private static function iconAlert(): string
+    {
+        return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg>';
+    }
+    private static function iconBomb(): string
+    {
+        return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="14" r="7"/><path d="m17 8 2-2m-2 2 1.5 1.5M15 5l3-3"/></svg>';
     }
 }

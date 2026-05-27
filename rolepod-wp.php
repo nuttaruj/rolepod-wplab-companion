@@ -5,7 +5,7 @@
  * Description:       The WordPress arm of the Rolepod ecosystem (https://github.com/nuttaruj/rolepod). Exposes guarded REST endpoints so AI coding agents (Claude Code / Cursor / Codex / Gemini) — driven by the rolepod-wplab MCP server — can run runtime introspection, the one-click pair wizard, and (with explicit opt-in) execute-php on this WordPress install. Endpoints are OFF by default; enable per-feature in Settings → Rolepod for WordPress. v2.6 adds a mu-plugin recovery guardian that survives main-plugin parse/fatal errors.
  * Author:            nuttaruj
  * Author URI:        https://github.com/nuttaruj
- * Version:           2.7.3
+ * Version:           2.8.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * License:           MIT
@@ -21,7 +21,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ROLEPOD_WP_VERSION', '2.7.3');
+define('ROLEPOD_WP_VERSION', '2.8.0');
 define('ROLEPOD_WP_FILE', __FILE__);
 define('ROLEPOD_WP_DIR', plugin_dir_path(__FILE__));
 
@@ -74,12 +74,20 @@ add_action('init', static function (): void {
     \Rolepod\Wp\Endpoint\OneTimeLogin::maybeIntercept();
 }, 1);
 
+// v2.8 — single top-level "Rolepod WP" menu with three submenus
+// (Setup / Change Ledger / Settings). The three Admin\*Page classes still
+// exist and own their respective render() methods; Menu::register() wires
+// them into one consolidated nav.
 add_action('admin_menu', static function (): void {
-    \Rolepod\Wp\Admin\SettingsPage::register();
-    \Rolepod\Wp\Admin\SetupWizard::register();
-    // v2.3 — AI Change Ledger
-    \Rolepod\Wp\Admin\ChangeLedgerPage::register();
+    \Rolepod\Wp\Admin\Menu::register();
 });
+
+// Conditional asset enqueue — bails out early on non-Rolepod admin screens
+// so unrelated pages pay zero byte cost.
+add_action('admin_enqueue_scripts', [\Rolepod\Wp\Admin\Menu::class, 'enqueueAssets']);
+
+// Legacy URL redirects (v2.7 and earlier nested Rolepod under Settings/Tools).
+add_action('admin_init', [\Rolepod\Wp\Admin\Menu::class, 'legacyRedirect']);
 
 // v2.3 — auto-install ledger schema on upgrade. register_activation_hook
 // only fires on fresh activate; WP plugin UPDATE replaces files without

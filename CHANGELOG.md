@@ -4,6 +4,77 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.8.0] — 2026-05-27 — Single top-level "Rolepod WP" admin menu (UX consolidation)
+
+### Restructured
+
+Previously the plugin scattered three admin pages across two parent menus:
+
+- **Settings → Rolepod for WordPress** (`options-general.php?page=rolepod-wp`)
+- **Tools → Rolepod WP Setup** (`tools.php?page=rolepod-wp-setup`)
+- **Tools → Rolepod WP Changes** (`tools.php?page=rolepod-wp-changes`)
+
+Users reported difficulty finding the three pages. v2.8 consolidates
+them into one top-level menu:
+
+```
+Rolepod WP              (admin.php?page=rolepod-wp)
+├── Setup               (admin.php?page=rolepod-wp)
+├── Change Ledger       (admin.php?page=rolepod-wp-changes)
+└── Settings            (admin.php?page=rolepod-wp-settings)
+```
+
+The old slugs and parents are intercepted in `admin_init` and 302-redirected
+to the new routes, so bookmarks and the MCP-side "open this page" deeplinks
+keep working without code changes on the client.
+
+### Added — design language
+
+- `assets/admin.css` (~10 KB) — CSS-only design tokens (palette, radii,
+  shadows, density) and components (Card, Toggle, Badge, Button, Chip,
+  Stat tile, Audit timeline, Ledger table, Panic panel, Stepper).
+- `assets/admin.js` (~2 KB) — vanilla-JS progressive enhancements only:
+  copy-to-clipboard buttons, bulk-select master checkbox, confirm-before-submit
+  on danger actions, debounced client-side filter on Change Ledger search.
+
+No React, no Babel-in-browser, no jQuery, no font CDN. System font stack.
+All inline icons are raw SVG — zero extra HTTP.
+
+### Added — `src/Admin/Menu.php` + `src/Admin/Shell.php`
+
+`Menu` owns top-level registration + asset enqueue + legacy redirects.
+`Shell::open()` / `Shell::close()` render a shared header (logo + version
++ endpoint status pill + sub-nav tabs) so every page has the same chrome.
+
+### Refactored
+
+`Admin\SettingsPage`, `Admin\SetupWizard`, `Admin\ChangeLedgerPage` keep
+their handler logic and nonces unchanged; only the markup was rewritten
+to use the new design tokens and call `Shell::open/close`.
+
+### Performance posture
+
+- **Zero impact on non-Rolepod admin pages.** `admin_enqueue_scripts`
+  callback bails out in O(1) on any hook string that doesn't contain
+  `rolepod-wp`. WordPress Posts/Pages/Media/Users/Comments/Plugins
+  screens pay no byte cost.
+- **No build step.** Plugin stays buildless — assets ship as plain CSS
+  and vanilla JS so the source tree is exactly what loads.
+- **No external network fetch.** No Google Fonts, no CDN scripts.
+- **Page render speed unchanged vs v2.7.** PHP renders HTML in the same
+  number of DB queries; the CSS file adds one HTTP request on
+  first-paint of a Rolepod page (cached thereafter by the version-pinned
+  enqueue URL).
+
+### Backward compat
+
+- All REST endpoints under `/wp-json/wplab/v1/*` unchanged.
+- All option keys (`rolepod_wp_config`, `rolepod_wp_safe_mode`, etc.) unchanged.
+- All nonce action names unchanged.
+- Legacy admin URLs `options-general.php?page=rolepod-wp` and
+  `tools.php?page=rolepod-wp-{setup,changes}` 302-redirect to the new
+  routes.
+
 ## [2.7.3] — 2026-05-27 — `/fs-write` response includes `absolute_path`
 
 MCP client (`@rolepod/wplab` v1.11.10) discovered during R6-7 page-builder
