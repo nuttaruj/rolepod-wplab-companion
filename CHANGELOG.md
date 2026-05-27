@@ -82,6 +82,56 @@ happens. WP's own WSOD-protection (5.2+ Recovery Mode) uses the same
 trick — we extend it with a REST recovery channel instead of email-based
 recovery links.
 
+## [2.6.5] — 2026-05-27 — Fix WP_Application_Passwords API (use get_user_application_passwords + wp_check_password)
+
+v2.6.4 fixed the pluggable.php load order. Demo retest then exposed the
+next layer of the same bug: I had assumed `WP_Application_Passwords` has a
+static method `validate_application_password()`. It doesn't. The hostinger
+error log confirmed:
+
+```
+PHP Fatal error: Uncaught Error: Call to undefined method
+WP_Application_Passwords::validate_application_password()
+in mu-plugins/rolepod-wp-guardian.php:546
+```
+
+The actual WP-core API is:
+- `WP_Application_Passwords::get_user_application_passwords(int $user_id): array`
+  — returns array of stored items: `[{uuid, app_id, name, password
+  (hashed), created, last_used, last_ip}]`.
+- The validation logic lives in the `wp_authenticate_application_password`
+  FUNCTION (not class method), in `wp-includes/user.php`. That function
+  iterates passwords and calls `wp_check_password` on each.
+
+We can't call `wp_authenticate_application_password` directly from
+muplugins_loaded because it's hooked into the `wp_authenticate` filter
+chain which isn't active until later. So we inline the iterate-and-check
+pattern:
+
+```php
+$passwords = WP_Application_Passwords::get_user_application_passwords($wp_user->ID);
+foreach ($passwords as $item) {
+    if (wp_check_password($pass, $item['password'], $wp_user->ID)) {
+        // best-effort usage recording
+        @WP_Application_Passwords::record_application_password_usage($wp_user->ID, $item['uuid']);
+        return $wp_user;
+    }
+}
+```
+
+Side benefit: `record_application_password_usage()` updates `last_used` +
+`last_ip` on the password row, matching the normal auth path so the user
+sees their recovery-app usage in wp-admin → Users → Application Passwords.
+
+### Architectural lesson
+
+When porting WP-core logic into a custom auth path, copy the FUNCTION
+body, not the class method assumption. WP separates auth into
+filter-hooked functions (`wp_authenticate*`) that wrap class-method
+helpers (`WP_Application_Passwords::*`). Reading WP source is the only
+authority — autocomplete / IDE inference of "validate_application_password
+must exist" was wrong.
+
 ## [2.6.4] — 2026-05-27 — Pre-load pluggable.php BEFORE get_user_by()
 
 Critical fix found during demo test of v2.6.3. Recovery endpoint requests

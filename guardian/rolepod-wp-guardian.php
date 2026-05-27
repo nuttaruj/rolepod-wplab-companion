@@ -22,7 +22,7 @@ if (defined('ROLEPOD_WP_GUARDIAN_VERSION')) {
     // Another copy already loaded — don't double-register.
     return;
 }
-define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.4');
+define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.5');
 define('ROLEPOD_WP_GUARDIAN_NAMESPACE', 'wplab-recovery/v1');
 define('ROLEPOD_WP_GUARDIAN_FATALS_TRANSIENT', 'rolepod_wp_recovery_recent_fatals');
 define('ROLEPOD_WP_GUARDIAN_SAFE_MODE_OPTION', 'rolepod_wp_safe_mode');
@@ -543,11 +543,28 @@ function rolepod_guardian_authenticate(): ?\WP_User
         require_once ABSPATH . WPINC . '/class-wp-application-passwords.php';
     }
 
-    $valid = \WP_Application_Passwords::validate_application_password($wp_user->ID, $pass);
-    if (is_array($valid) && !empty($valid)) {
-        // validate_application_password returns the matched password item
-        // (array) on success or false on no match.
-        return $wp_user;
+    // WP_Application_Passwords::get_user_application_passwords() returns
+    // an array of items: [{uuid, app_id, name, password (hashed), created,
+    // last_used, last_ip}]. We hash-compare each via wp_check_password.
+    // This mirrors wp_authenticate_application_password() in WP core; we
+    // can't call that function directly because it's hooked into the
+    // wp_authenticate filter chain which isn't active at muplugins_loaded.
+    // (Earlier v2.6.4 tried ::validate_application_password() but that
+    // method doesn't exist in WP core — confirmed on Hostinger PHP 8.1.)
+    $passwords = \WP_Application_Passwords::get_user_application_passwords($wp_user->ID);
+    if (is_array($passwords)) {
+        foreach ($passwords as $item) {
+            if (!isset($item['password'])) {
+                continue;
+            }
+            if (wp_check_password($pass, (string) $item['password'], $wp_user->ID)) {
+                // Best-effort record usage (non-fatal if fails).
+                if (isset($item['uuid']) && method_exists('\WP_Application_Passwords', 'record_application_password_usage')) {
+                    @\WP_Application_Passwords::record_application_password_usage($wp_user->ID, (string) $item['uuid']);
+                }
+                return $wp_user;
+            }
+        }
     }
 
     // Last-resort fallback: plain login password (useful for local dev /
