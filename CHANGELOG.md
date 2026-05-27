@@ -4,6 +4,62 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.9.0] — 2026-05-27 — GitHub-based auto-updater (no wp.org listing needed)
+
+### Why
+
+Plugin is hosted on GitHub, not wordpress.org. Without an update
+mechanism each user has to manually re-download the zip + reinstall
+every release. With many users that doesn't scale. WordPress core's
+plugin-update transient filter is the well-known fix: point WP at
+GitHub releases instead of wp.org and the standard update notice +
+one-click upgrade button just work.
+
+### Added — `src/Updater.php`
+
+Two filter hooks on init:
+
+- `pre_set_site_transient_update_plugins` — when WP refreshes its
+  plugin update list (default every 12h via cron), the filter calls
+  GitHub's `releases/latest` API for `nuttaruj/rolepod-wp`. If the
+  tag is newer than `ROLEPOD_WP_VERSION` it injects an update record
+  pointing at the stable
+  `releases/latest/download/rolepod-wp.zip` asset (produced by
+  scripts/build-zip.sh on every tag push).
+
+- `plugins_api` — handles the "View details" popup that opens when
+  the admin clicks the version number in the update notice. Returns a
+  basic info card pointing at the GitHub README and CHANGELOG.md.
+
+GitHub API responses are cached in a 6h transient
+(`rolepod_wp_github_release`) so admin page loads don't hammer the
+API. Rate limit on unauthenticated calls is 60 req/hour per IP —
+this plugin's polling footprint is well under that.
+
+`upgrader_process_complete` action clears the cache right after a
+successful self-upgrade so the next pageview doesn't show a stale
+"update available" notice for the version that was just installed.
+
+### How users get future updates
+
+1. We tag + push `vX.Y.Z` from the rolepod-wp repo.
+2. CI builds the zip + uploads it to the GitHub release.
+3. Within 12h every install with our plugin active sees the standard
+   WP update notice. Click "Update now" → WP downloads our zip →
+   extracts to `wp-content/plugins/rolepod-wp/` → reactivates.
+
+No wp.org listing, no separate update server, no admin action
+required from existing users beyond the click.
+
+### Back-compat
+
+- Pure additive: no existing API / option / hook surface changes.
+- WP cron schedules unchanged — uses the standard
+  `wp_update_plugins` polling.
+- If GitHub is unreachable the filter silently no-ops — WP shows the
+  current version with no update notice (same UX as a wp.org plugin
+  during a network blip).
+
 ## [2.8.9] — 2026-05-27 — Drop "Enable companion REST endpoints" master toggle (plugin activation IS consent)
 
 ### Why

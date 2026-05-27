@@ -5,7 +5,7 @@
  * Description:       The WordPress arm of the Rolepod ecosystem (https://github.com/nuttaruj/rolepod). Exposes guarded REST endpoints so AI coding agents (Claude Code / Cursor / Codex / Gemini) — driven by the rolepod-wplab MCP server — can run runtime introspection, the one-click pair wizard, and (with explicit opt-in) execute-php on this WordPress install. Endpoints are OFF by default; enable per-feature in Settings → Rolepod for WordPress. v2.6 adds a mu-plugin recovery guardian that survives main-plugin parse/fatal errors.
  * Author:            nuttaruj
  * Author URI:        https://github.com/nuttaruj
- * Version:           2.8.9
+ * Version:           2.9.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * License:           MIT
@@ -21,7 +21,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ROLEPOD_WP_VERSION', '2.8.9');
+define('ROLEPOD_WP_VERSION', '2.9.0');
 define('ROLEPOD_WP_FILE', __FILE__);
 define('ROLEPOD_WP_DIR', plugin_dir_path(__FILE__));
 
@@ -88,6 +88,28 @@ add_action('admin_enqueue_scripts', [\Rolepod\Wp\Admin\Menu::class, 'enqueueAsse
 
 // Legacy URL redirects (v2.7 and earlier nested Rolepod under Settings/Tools).
 add_action('admin_init', [\Rolepod\Wp\Admin\Menu::class, 'legacyRedirect']);
+
+// v2.9.0 — GitHub-based auto-updater. Polls releases/latest at the cadence
+// WP polls the plugin update transient (default 12h); responds via the
+// standard WP update notice + one-click upgrade button.
+\Rolepod\Wp\Updater::init();
+
+// Clear the GitHub release cache right after a successful self-upgrade so
+// the next pageview sees the freshly-installed version, not the stale
+// "update available" record.
+add_action('upgrader_process_complete', static function ($upgrader, array $opts): void {
+    if (($opts['action'] ?? '') !== 'update' || ($opts['type'] ?? '') !== 'plugin') {
+        return;
+    }
+    $plugins = $opts['plugins'] ?? [];
+    if (!is_array($plugins)) {
+        return;
+    }
+    $self = plugin_basename(ROLEPOD_WP_FILE);
+    if (in_array($self, $plugins, true)) {
+        \Rolepod\Wp\Updater::clearCache();
+    }
+}, 10, 2);
 
 // v2.3 — auto-install ledger schema on upgrade. register_activation_hook
 // only fires on fresh activate; WP plugin UPDATE replaces files without
