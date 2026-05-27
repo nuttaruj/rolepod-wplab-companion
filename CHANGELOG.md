@@ -4,6 +4,34 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.7.3] — 2026-05-27 — `/fs-write` response includes `absolute_path`
+
+MCP client (`@rolepod/wplab` v1.11.10) discovered during R6-7 page-builder
+swap test: `CompanionBridge.coerceFsWriteResponse` reads `absolute_path`
+from the response body but `/fs-write` only returned `{path, bytes_written,
+backup_path}`. Default fallback was `""`, which propagated into
+`wp eval file_get_contents("")` → `PHP Fatal error: Uncaught ValueError:
+Path must not be empty`.
+
+### Fixed — `/fs-write` returns `absolute_path`
+
+```php
+return new WP_REST_Response([
+    'ok' => true,
+    'path' => $relPath,
+    'absolute_path' => $absPath,  // NEW
+    'bytes_written' => filesize($absPath),
+    'backup_path' => $backupPath,
+], 200);
+```
+
+`$absPath` already computed inside the handler (`ABSPATH . $relPath`) —
+the response just never exposed it.
+
+The MCP client v1.11.10 ships a fallback (`absolutePath || tmpRel`) that
+relies on `wp-cli`'s `getcwd() === ABSPATH`, so older callers still work.
+This patch closes the contract gap explicitly.
+
 ## [2.6.0] — 2026-05-27 — Recovery guardian mu-plugin
 
 WordPress core's WSOD-protection ships with `set_recovery_mode_email`, an

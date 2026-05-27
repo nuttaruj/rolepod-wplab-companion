@@ -121,6 +121,7 @@ final class FsWrite
         return new WP_REST_Response([
             'ok' => true,
             'path' => $relPath,
+            'absolute_path' => $absPath,
             'bytes_written' => filesize($absPath),
             'backup_path' => $backupPath,
         ], 200);
