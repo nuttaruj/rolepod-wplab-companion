@@ -22,7 +22,7 @@ if (defined('ROLEPOD_WP_GUARDIAN_VERSION')) {
     // Another copy already loaded — don't double-register.
     return;
 }
-define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.7');
+define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.8');
 define('ROLEPOD_WP_GUARDIAN_NAMESPACE', 'wplab-recovery/v1');
 define('ROLEPOD_WP_GUARDIAN_FATALS_TRANSIENT', 'rolepod_wp_recovery_recent_fatals');
 define('ROLEPOD_WP_GUARDIAN_SAFE_MODE_OPTION', 'rolepod_wp_safe_mode');
@@ -103,76 +103,65 @@ register_shutdown_function(static function (): void {
 });
 
 /**
- * REST registration. Fires on rest_api_init regardless of main plugin status.
+ * REST registration. Fires on rest_api_init when WP boot completes normally
+ * (used for the "normal" path when WP is healthy). The early-dispatch path
+ * (muplugins_loaded short-circuit) calls rolepod_guardian_register_routes()
+ * directly on a manually-created WP_REST_Server because rest_get_server() →
+ * rest_api_init → create_initial_rest_routes() depends on classes
+ * (WP_Site_Health, etc.) not loaded until much later in WP boot.
  */
 add_action('rest_api_init', static function (): void {
+    rolepod_guardian_register_routes();
+});
+
+/**
+ * Register guardian routes. Used by both the rest_api_init hook (normal
+ * path, register_rest_route() routes through the global server) AND by
+ * the early-dispatch path (manually-created server passed in, so we call
+ * $server->register_route() directly).
+ *
+ * @param \WP_REST_Server|null $server  When null, uses register_rest_route
+ *                                      (normal path). When passed, registers
+ *                                      directly on the given server (early
+ *                                      dispatch — avoids firing rest_api_init
+ *                                      which would trigger WP-core's
+ *                                      create_initial_rest_routes() that
+ *                                      requires WP_Site_Health etc).
+ */
+function rolepod_guardian_register_routes(?\WP_REST_Server $server = null): void
+{
     $perm = static function (): bool {
         return current_user_can('manage_options');
     };
 
-    register_rest_route(ROLEPOD_WP_GUARDIAN_NAMESPACE, '/status', [
-        'methods' => 'GET',
-        'callback' => 'rolepod_guardian_status',
-        'permission_callback' => $perm,
-    ]);
+    $routes = [
+        ['method' => 'GET',  'route' => '/status',           'callback' => 'rolepod_guardian_status',           'args' => []],
+        ['method' => 'POST', 'route' => '/disable-plugin',   'callback' => 'rolepod_guardian_disable_plugin',   'args' => ['plugin' => ['required' => true, 'type' => 'string']]],
+        ['method' => 'POST', 'route' => '/disable-file',     'callback' => 'rolepod_guardian_disable_file',     'args' => ['path' => ['required' => true, 'type' => 'string']]],
+        ['method' => 'POST', 'route' => '/restore-file',     'callback' => 'rolepod_guardian_restore_file',     'args' => ['path' => ['required' => true, 'type' => 'string']]],
+        ['method' => 'POST', 'route' => '/restore-snapshot', 'callback' => 'rolepod_guardian_restore_snapshot', 'args' => ['snapshot_path' => ['required' => true, 'type' => 'string']]],
+        ['method' => 'GET',  'route' => '/list-changes',     'callback' => 'rolepod_guardian_list_changes',     'args' => []],
+        ['method' => 'POST', 'route' => '/safe-mode',        'callback' => 'rolepod_guardian_safe_mode',        'args' => ['enabled' => ['required' => true, 'type' => 'boolean']]],
+        ['method' => 'POST', 'route' => '/clear-fatals',     'callback' => 'rolepod_guardian_clear_fatals',     'args' => []],
+    ];
 
-    register_rest_route(ROLEPOD_WP_GUARDIAN_NAMESPACE, '/disable-plugin', [
-        'methods' => 'POST',
-        'callback' => 'rolepod_guardian_disable_plugin',
-        'permission_callback' => $perm,
-        'args' => [
-            'plugin' => ['required' => true, 'type' => 'string'],
-        ],
-    ]);
-
-    register_rest_route(ROLEPOD_WP_GUARDIAN_NAMESPACE, '/disable-file', [
-        'methods' => 'POST',
-        'callback' => 'rolepod_guardian_disable_file',
-        'permission_callback' => $perm,
-        'args' => [
-            'path' => ['required' => true, 'type' => 'string'],
-        ],
-    ]);
-
-    register_rest_route(ROLEPOD_WP_GUARDIAN_NAMESPACE, '/restore-file', [
-        'methods' => 'POST',
-        'callback' => 'rolepod_guardian_restore_file',
-        'permission_callback' => $perm,
-        'args' => [
-            'path' => ['required' => true, 'type' => 'string'],
-        ],
-    ]);
-
-    register_rest_route(ROLEPOD_WP_GUARDIAN_NAMESPACE, '/restore-snapshot', [
-        'methods' => 'POST',
-        'callback' => 'rolepod_guardian_restore_snapshot',
-        'permission_callback' => $perm,
-        'args' => [
-            'snapshot_path' => ['required' => true, 'type' => 'string'],
-        ],
-    ]);
-
-    register_rest_route(ROLEPOD_WP_GUARDIAN_NAMESPACE, '/list-changes', [
-        'methods' => 'GET',
-        'callback' => 'rolepod_guardian_list_changes',
-        'permission_callback' => $perm,
-    ]);
-
-    register_rest_route(ROLEPOD_WP_GUARDIAN_NAMESPACE, '/safe-mode', [
-        'methods' => 'POST',
-        'callback' => 'rolepod_guardian_safe_mode',
-        'permission_callback' => $perm,
-        'args' => [
-            'enabled' => ['required' => true, 'type' => 'boolean'],
-        ],
-    ]);
-
-    register_rest_route(ROLEPOD_WP_GUARDIAN_NAMESPACE, '/clear-fatals', [
-        'methods' => 'POST',
-        'callback' => 'rolepod_guardian_clear_fatals',
-        'permission_callback' => $perm,
-    ]);
-});
+    foreach ($routes as $r) {
+        $route_args = [
+            'methods' => $r['method'],
+            'callback' => $r['callback'],
+            'permission_callback' => $perm,
+            'args' => $r['args'],
+        ];
+        if ($server !== null) {
+            // Early-dispatch path: register directly on the passed server,
+            // bypassing register_rest_route()'s global state.
+            $full_route = '/' . trim(ROLEPOD_WP_GUARDIAN_NAMESPACE, '/') . '/' . trim($r['route'], '/');
+            $server->register_route(ROLEPOD_WP_GUARDIAN_NAMESPACE, $full_route, [$route_args]);
+        } else {
+            register_rest_route(ROLEPOD_WP_GUARDIAN_NAMESPACE, $r['route'], $route_args);
+        }
+    }
+}
 
 /**
  * GET /status — main plugin alive? recent fatals? safe-mode on?
@@ -423,7 +412,6 @@ function rolepod_guardian_early_dispatch(): void
     $uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
     $method = isset($_SERVER['REQUEST_METHOD']) ? (string) $_SERVER['REQUEST_METHOD'] : 'GET';
 
-    // Extract route from URI (handles both /wp-json/wplab-recovery/v1/... and ?rest_route=)
     $route = rolepod_guardian_extract_route($uri);
     if ($route === null) {
         rolepod_guardian_emit(404, ['code' => 'rest_no_route', 'message' => 'no recovery route in URI']);
@@ -441,19 +429,32 @@ function rolepod_guardian_early_dispatch(): void
         rolepod_guardian_emit(403, ['code' => 'rest_forbidden', 'message' => 'manage_options required']);
     }
 
-    // Force-init REST API (fires rest_api_init action which registers guardian routes).
-    $server = rest_get_server();
+    // Manually create a WP_REST_Server WITHOUT firing rest_api_init action.
+    // v2.6.7 called rest_get_server() which fires rest_api_init →
+    // create_initial_rest_routes() in WP core → uses WP_Site_Health class
+    // which isn't loaded yet at muplugins_loaded. FATAL: "Class
+    // WP_Site_Health not found" on Hostinger PHP 8.1 / WP 7.0.
+    //
+    // Skip the action chain by instantiating WP_REST_Server directly +
+    // registering ONLY our guardian routes. Plugins + theme + WP-core
+    // REST routes are never registered for this request — that's fine
+    // because we're explicitly in recovery mode and don't need them.
+    require_once ABSPATH . WPINC . '/rest-api.php';
+    require_once ABSPATH . WPINC . '/rest-api/class-wp-rest-server.php';
+    require_once ABSPATH . WPINC . '/rest-api/class-wp-rest-request.php';
+    require_once ABSPATH . WPINC . '/rest-api/class-wp-rest-response.php';
+    $server = new \WP_REST_Server();
+    rolepod_guardian_register_routes($server);
 
-    // Build request
     $request = new WP_REST_Request($method, $route);
 
-    // Query params
+    // Query params (skip the rest_route marker itself).
     foreach ($_GET as $key => $value) {
         if ($key === 'rest_route') continue;
         $request->set_param((string) $key, $value);
     }
 
-    // Body params
+    // Body params (JSON).
     if (in_array(strtoupper($method), ['POST', 'PUT', 'PATCH'], true)) {
         $body = file_get_contents('php://input');
         if (is_string($body) && $body !== '') {
@@ -468,7 +469,6 @@ function rolepod_guardian_early_dispatch(): void
         }
     }
 
-    // Dispatch
     $response = $server->dispatch($request);
     $status = $response instanceof WP_REST_Response ? $response->get_status() : 200;
     $data = $response instanceof WP_REST_Response ? $response->get_data() : $response;
