@@ -22,7 +22,7 @@ if (defined('ROLEPOD_WP_GUARDIAN_VERSION')) {
     // Another copy already loaded — don't double-register.
     return;
 }
-define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.1');
+define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.2');
 define('ROLEPOD_WP_GUARDIAN_NAMESPACE', 'wplab-recovery/v1');
 define('ROLEPOD_WP_GUARDIAN_FATALS_TRANSIENT', 'rolepod_wp_recovery_recent_fatals');
 define('ROLEPOD_WP_GUARDIAN_SAFE_MODE_OPTION', 'rolepod_wp_safe_mode');
@@ -501,53 +501,101 @@ function rolepod_guardian_extract_route(string $uri): ?string
  * Manual Application Password auth (Basic auth header). Returns WP_User on
  * success, null on failure. Bypasses normal init flow because we're at
  * muplugins_loaded — well before init.
+ *
+ * Auth header sources, in order: PHP_AUTH_USER (Apache mod_php),
+ * HTTP_AUTHORIZATION (FastCGI/Nginx), REDIRECT_HTTP_AUTHORIZATION
+ * (some Apache RewriteRule setups).
+ *
+ * Uses WP_Application_Passwords::validate_application_password — the
+ * lowest-level validation that bypasses `wp_is_application_passwords_available()`
+ * (which a security plugin may have disabled). This is intentional for
+ * recovery: we want a working escape hatch even if Application Passwords
+ * are disabled site-wide.
  */
 function rolepod_guardian_authenticate(): ?\WP_User
 {
-    // Apache + most setups: PHP_AUTH_USER / PHP_AUTH_PW populated automatically.
-    // FastCGI: must rewrite from HTTP_AUTHORIZATION.
-    $user = isset($_SERVER['PHP_AUTH_USER']) ? (string) $_SERVER['PHP_AUTH_USER'] : '';
-    $pass = isset($_SERVER['PHP_AUTH_PW']) ? (string) $_SERVER['PHP_AUTH_PW'] : '';
-
-    if (($user === '' || $pass === '') && isset($_SERVER['HTTP_AUTHORIZATION'])) {
-        $auth = (string) $_SERVER['HTTP_AUTHORIZATION'];
-        if (stripos($auth, 'Basic ') === 0) {
-            $decoded = base64_decode(substr($auth, 6), true);
-            if (is_string($decoded) && strpos($decoded, ':') !== false) {
-                [$user, $pass] = explode(':', $decoded, 2);
-            }
-        }
-    }
-
+    [$user, $pass] = rolepod_guardian_extract_basic_auth();
     if ($user === '' || $pass === '') {
         return null;
     }
 
-    $wp_user = get_user_by('login', $user);
-    if (!$wp_user) {
-        $wp_user = get_user_by('email', $user);
-    }
+    // get_user_by lives in wp-includes/user.php which is loaded by
+    // wp-load.php before mu-plugins, so it's always available here.
+    $wp_user = is_email($user) ? get_user_by('email', $user) : get_user_by('login', $user);
     if (!$wp_user) {
         return null;
     }
 
-    // Application Password: validate via WP core class.
+    // wp_check_password is pluggable + lives in wp-includes/pluggable.php
+    // which loads AFTER plugins in wp-settings.php, so it's NOT available
+    // at muplugins_loaded by default. Require it explicitly. This locks
+    // in WP-core's wp_check_password (security plugins can't override the
+    // recovery path) — desired for an escape hatch.
+    if (!function_exists('wp_check_password')) {
+        require_once ABSPATH . WPINC . '/pluggable.php';
+    }
+
     if (!class_exists('\WP_Application_Passwords')) {
         require_once ABSPATH . WPINC . '/class-wp-application-passwords.php';
     }
 
     $valid = \WP_Application_Passwords::validate_application_password($wp_user->ID, $pass);
-    if (is_wp_error($valid) || $valid === false) {
-        // Fallback: plain user password (rare for REST, but handle for tests).
-        if (!function_exists('wp_check_password')) {
-            require_once ABSPATH . WPINC . '/pluggable.php';
-        }
-        if (!wp_check_password($pass, $wp_user->user_pass, $wp_user->ID)) {
-            return null;
+    if (is_array($valid) && !empty($valid)) {
+        // validate_application_password returns the matched password item
+        // (array) on success or false on no match.
+        return $wp_user;
+    }
+
+    // Last-resort fallback: plain login password (useful for local dev /
+    // CI smoke tests that don't have Application Passwords set up).
+    if (wp_check_password($pass, $wp_user->user_pass, $wp_user->ID)) {
+        return $wp_user;
+    }
+
+    return null;
+}
+
+/**
+ * Extract username + password from request, handling all common
+ * server-variable layouts.
+ *
+ * @return array{0:string,1:string} [user, pass] — empty strings if missing.
+ */
+function rolepod_guardian_extract_basic_auth(): array
+{
+    $user = isset($_SERVER['PHP_AUTH_USER']) ? (string) $_SERVER['PHP_AUTH_USER'] : '';
+    $pass = isset($_SERVER['PHP_AUTH_PW']) ? (string) $_SERVER['PHP_AUTH_PW'] : '';
+    if ($user !== '' && $pass !== '') {
+        return [$user, $pass];
+    }
+
+    $authHeader = '';
+    if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+        $authHeader = (string) $_SERVER['HTTP_AUTHORIZATION'];
+    } elseif (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+        // Some Apache configs strip Authorization unless rewritten.
+        $authHeader = (string) $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+    } elseif (function_exists('getallheaders')) {
+        $headers = getallheaders();
+        if (is_array($headers)) {
+            foreach ($headers as $name => $value) {
+                if (strcasecmp((string) $name, 'Authorization') === 0) {
+                    $authHeader = (string) $value;
+                    break;
+                }
+            }
         }
     }
 
-    return $wp_user;
+    if ($authHeader !== '' && stripos($authHeader, 'Basic ') === 0) {
+        $decoded = base64_decode(substr($authHeader, 6), true);
+        if (is_string($decoded) && strpos($decoded, ':') !== false) {
+            [$user, $pass] = explode(':', $decoded, 2);
+            return [(string) $user, (string) $pass];
+        }
+    }
+
+    return ['', ''];
 }
 
 /**

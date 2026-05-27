@@ -82,6 +82,41 @@ happens. WP's own WSOD-protection (5.2+ Recovery Mode) uses the same
 trick — we extend it with a REST recovery channel instead of email-based
 recovery links.
 
+## [2.6.2] — 2026-05-27 — Best-practice auth hardening (pluggable load order + REDIRECT_HTTP_AUTHORIZATION)
+
+Two correctness fixes in the early-dispatch path.
+
+### Fixed — pluggable.php load order in `rolepod_guardian_authenticate()`
+
+`WP_Application_Passwords::validate_application_password()` internally
+calls `wp_check_password()`, which lives in `wp-includes/pluggable.php` —
+that file loads AFTER plugins in `wp-settings.php`, so at
+`muplugins_loaded` it's NOT available yet. v2.6.1 required it only in the
+fallback branch, so the primary Application Password validation was
+silently failing on some setups. Fix: require `pluggable.php` BEFORE
+calling `validate_application_password()`. This also locks in WP-core's
+`wp_check_password` (security plugins can't override the recovery escape
+hatch — desirable for a recovery path).
+
+### Added — `REDIRECT_HTTP_AUTHORIZATION` + `getallheaders()` fallbacks
+
+Some Apache RewriteRule configurations strip `Authorization` from
+`$_SERVER['HTTP_AUTHORIZATION']` and stash it in
+`$_SERVER['REDIRECT_HTTP_AUTHORIZATION']`. Other setups only expose it via
+`getallheaders()`. Auth extraction now tries, in order: `PHP_AUTH_USER` →
+`HTTP_AUTHORIZATION` → `REDIRECT_HTTP_AUTHORIZATION` → `getallheaders()`
+scan. Covers Apache mod_php, Apache FastCGI, Nginx FPM, LiteSpeed.
+
+### Refactored
+
+Split `rolepod_guardian_authenticate()` into two functions:
+`extract_basic_auth()` (header parsing) + `authenticate()` (user lookup +
+password validation). Easier to test + reason about.
+
+`is_email()` check before `get_user_by('email')` — avoids unnecessary
+`get_user_by('login')` then `get_user_by('email')` retry chain. Matches
+WP-core's `wp_authenticate_application_password` behavior.
+
 ## [2.6.1] — 2026-05-27 — Guardian early dispatch (fixes theme-fatal recovery)
 
 Ships the early-dispatch path that was originally deferred to v2.7. Demo
