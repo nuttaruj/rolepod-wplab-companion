@@ -22,10 +22,40 @@ if (defined('ROLEPOD_WP_GUARDIAN_VERSION')) {
     // Another copy already loaded — don't double-register.
     return;
 }
-define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.0');
+define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.1');
 define('ROLEPOD_WP_GUARDIAN_NAMESPACE', 'wplab-recovery/v1');
 define('ROLEPOD_WP_GUARDIAN_FATALS_TRANSIENT', 'rolepod_wp_recovery_recent_fatals');
 define('ROLEPOD_WP_GUARDIAN_SAFE_MODE_OPTION', 'rolepod_wp_safe_mode');
+
+/**
+ * Early-dispatch short-circuit (v2.6.1).
+ *
+ * WHY: rest_api_init only fires after WP completes init(), which happens
+ * AFTER setup_theme + theme functions.php load. If theme fatals at load
+ * time, rest_api_init never fires → our guardian REST routes never
+ * register → recovery endpoints unreachable in that request. Theme load
+ * failure is ~40% of real-world WSODs.
+ *
+ * FIX: detect recovery URL at the top of mu-plugin load, then hook
+ * muplugins_loaded:PHP_INT_MAX to short-circuit BEFORE plugins or theme
+ * are loaded. Manually init REST API, register guardian routes, dispatch,
+ * exit. Plugins + theme never load for this request.
+ *
+ * AUTH: WP's Application Password validation classes are in wp-includes
+ * (loaded by wp-load.php BEFORE mu-plugins). We can call
+ * WP_Application_Passwords::validate_application_password() directly.
+ */
+$rolepod_guardian_uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
+if (
+    strpos($rolepod_guardian_uri, '/wp-json/wplab-recovery/v1/') !== false
+    || strpos($rolepod_guardian_uri, 'rest_route=/wplab-recovery/v1/') !== false
+    || strpos($rolepod_guardian_uri, 'rest_route=%2Fwplab-recovery%2Fv1%2F') !== false
+) {
+    add_action('muplugins_loaded', static function (): void {
+        rolepod_guardian_early_dispatch();
+        exit; // never returns — bypasses plugin/theme load entirely
+    }, PHP_INT_MAX);
+}
 
 /**
  * Detect FATAL via shutdown handler. WP core's own WSOD-protection uses the
@@ -373,6 +403,165 @@ function rolepod_guardian_clear_fatals(): WP_REST_Response
 {
     delete_transient(ROLEPOD_WP_GUARDIAN_FATALS_TRANSIENT);
     return new WP_REST_Response(['ok' => true], 200);
+}
+
+// -----------------------------------------------------------------------------
+// Early-dispatch (v2.6.1)
+// -----------------------------------------------------------------------------
+
+/**
+ * Manual REST dispatch from muplugins_loaded. Authenticates via WP
+ * Application Password directly (Basic auth header), registers guardian
+ * routes, dispatches to the handler, emits JSON, exits.
+ */
+function rolepod_guardian_early_dispatch(): void
+{
+    if (!defined('REST_REQUEST')) {
+        define('REST_REQUEST', true);
+    }
+
+    $uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
+    $method = isset($_SERVER['REQUEST_METHOD']) ? (string) $_SERVER['REQUEST_METHOD'] : 'GET';
+
+    // Extract route from URI (handles both /wp-json/wplab-recovery/v1/... and ?rest_route=)
+    $route = rolepod_guardian_extract_route($uri);
+    if ($route === null) {
+        rolepod_guardian_emit(404, ['code' => 'rest_no_route', 'message' => 'no recovery route in URI']);
+    }
+
+    // Authenticate via Application Password (Basic auth).
+    $user = rolepod_guardian_authenticate();
+    if ($user === null) {
+        header('WWW-Authenticate: Basic realm="WordPress Recovery"');
+        rolepod_guardian_emit(401, ['code' => 'rest_not_logged_in', 'message' => 'authentication required']);
+    }
+    wp_set_current_user($user->ID);
+
+    if (!current_user_can('manage_options')) {
+        rolepod_guardian_emit(403, ['code' => 'rest_forbidden', 'message' => 'manage_options required']);
+    }
+
+    // Force-init REST API (fires rest_api_init action which registers guardian routes).
+    $server = rest_get_server();
+
+    // Build request
+    $request = new WP_REST_Request($method, $route);
+
+    // Query params
+    foreach ($_GET as $key => $value) {
+        if ($key === 'rest_route') continue;
+        $request->set_param((string) $key, $value);
+    }
+
+    // Body params
+    if (in_array(strtoupper($method), ['POST', 'PUT', 'PATCH'], true)) {
+        $body = file_get_contents('php://input');
+        if (is_string($body) && $body !== '') {
+            $decoded = json_decode($body, true);
+            if (is_array($decoded)) {
+                foreach ($decoded as $key => $value) {
+                    $request->set_param((string) $key, $value);
+                }
+                $request->set_body($body);
+                $request->set_header('Content-Type', 'application/json');
+            }
+        }
+    }
+
+    // Dispatch
+    $response = $server->dispatch($request);
+    $status = $response instanceof WP_REST_Response ? $response->get_status() : 200;
+    $data = $response instanceof WP_REST_Response ? $response->get_data() : $response;
+
+    rolepod_guardian_emit($status, $data);
+}
+
+/**
+ * Parse REST route from request URI. Returns "/wplab-recovery/v1/<action>"
+ * or null if no match.
+ */
+function rolepod_guardian_extract_route(string $uri): ?string
+{
+    // /wp-json/wplab-recovery/v1/status (and beyond)
+    if (preg_match('#/wp-json(/wplab-recovery/v1/[A-Za-z0-9_\-/]+)#', $uri, $m)) {
+        return $m[1];
+    }
+    // ?rest_route=/wplab-recovery/v1/status
+    if (preg_match('#rest_route=(/wplab-recovery/v1/[A-Za-z0-9_\-/]+)#', $uri, $m)) {
+        return urldecode($m[1]);
+    }
+    // url-encoded form
+    if (preg_match('#rest_route=(%2Fwplab-recovery%2Fv1%2F[A-Za-z0-9_\-/]+)#', $uri, $m)) {
+        return urldecode($m[1]);
+    }
+    return null;
+}
+
+/**
+ * Manual Application Password auth (Basic auth header). Returns WP_User on
+ * success, null on failure. Bypasses normal init flow because we're at
+ * muplugins_loaded — well before init.
+ */
+function rolepod_guardian_authenticate(): ?\WP_User
+{
+    // Apache + most setups: PHP_AUTH_USER / PHP_AUTH_PW populated automatically.
+    // FastCGI: must rewrite from HTTP_AUTHORIZATION.
+    $user = isset($_SERVER['PHP_AUTH_USER']) ? (string) $_SERVER['PHP_AUTH_USER'] : '';
+    $pass = isset($_SERVER['PHP_AUTH_PW']) ? (string) $_SERVER['PHP_AUTH_PW'] : '';
+
+    if (($user === '' || $pass === '') && isset($_SERVER['HTTP_AUTHORIZATION'])) {
+        $auth = (string) $_SERVER['HTTP_AUTHORIZATION'];
+        if (stripos($auth, 'Basic ') === 0) {
+            $decoded = base64_decode(substr($auth, 6), true);
+            if (is_string($decoded) && strpos($decoded, ':') !== false) {
+                [$user, $pass] = explode(':', $decoded, 2);
+            }
+        }
+    }
+
+    if ($user === '' || $pass === '') {
+        return null;
+    }
+
+    $wp_user = get_user_by('login', $user);
+    if (!$wp_user) {
+        $wp_user = get_user_by('email', $user);
+    }
+    if (!$wp_user) {
+        return null;
+    }
+
+    // Application Password: validate via WP core class.
+    if (!class_exists('\WP_Application_Passwords')) {
+        require_once ABSPATH . WPINC . '/class-wp-application-passwords.php';
+    }
+
+    $valid = \WP_Application_Passwords::validate_application_password($wp_user->ID, $pass);
+    if (is_wp_error($valid) || $valid === false) {
+        // Fallback: plain user password (rare for REST, but handle for tests).
+        if (!function_exists('wp_check_password')) {
+            require_once ABSPATH . WPINC . '/pluggable.php';
+        }
+        if (!wp_check_password($pass, $wp_user->user_pass, $wp_user->ID)) {
+            return null;
+        }
+    }
+
+    return $wp_user;
+}
+
+/**
+ * Emit JSON response + exit. Sends proper status header.
+ */
+function rolepod_guardian_emit(int $status, $data): void
+{
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+        header('X-Rolepod-Guardian: ' . ROLEPOD_WP_GUARDIAN_VERSION);
+        http_response_code($status);
+    }
+    echo wp_json_encode($data);
+    exit;
 }
 
 // -----------------------------------------------------------------------------

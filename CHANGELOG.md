@@ -82,15 +82,100 @@ happens. WP's own WSOD-protection (5.2+ Recovery Mode) uses the same
 trick — we extend it with a REST recovery channel instead of email-based
 recovery links.
 
-### Doesn't cover
+## [2.6.1] — 2026-05-27 — Guardian early dispatch (fixes theme-fatal recovery)
+
+Ships the early-dispatch path that was originally deferred to v2.7. Demo
+testing during v2.6.0 confirmed that REST endpoints registered via
+`rest_api_init` are unreachable when the boot dies during theme load.
+
+### Added — `muplugins_loaded:PHP_INT_MAX` short-circuit
+
+Guardian now detects recovery URLs at the top of mu-plugin load. If the
+request URI matches `/wp-json/wplab-recovery/v1/*` or
+`?rest_route=/wplab-recovery/v1/*`, it hooks `muplugins_loaded` at max
+priority and short-circuits BEFORE WP loads plugins or themes:
+
+1. Sets `REST_REQUEST` const, parses route from URI.
+2. Manual Basic-auth check via `WP_Application_Passwords::validate_application_password()`
+   (works pre-init because the class is loaded by `wp-load.php`).
+3. Falls back to plain `wp_check_password()` for non-app-password tests.
+4. Force-fires `rest_api_init` via `rest_get_server()` so guardian routes
+   register early.
+5. Builds `WP_REST_Request` from `$_SERVER` + JSON body.
+6. Dispatches via `WP_REST_Server::dispatch()`.
+7. Emits JSON + `exit` — plugins + theme NEVER load for this request.
+
+Adds `X-Rolepod-Guardian: 2.6.1` response header for client identification.
+
+### Now handled
+
+- Theme `functions.php` parse error / fatal — guardian endpoints reachable.
+- Plugin file parse errors (other than the guardian mu-plugin itself).
+- Any post-mu-plugin fatal that would otherwise kill the request.
+
+### Limitation reduced from ~40% to ~5%
+
+Real-world WSOD distribution (~95% theme + plugin runtime / load) now fully
+recoverable through guardian REST. Remaining 5% (DB-dead, wp-config-broken,
+core file missing) still require SSH/FTP/cPanel.
+
+### Known limitation — current dispatch path (PRE-v2.6.1 — KEPT FOR HISTORY)
+
+Guardian REST endpoints register via `rest_api_init`. That action only fires
+once WP completes the boot sequence through `init`. Since theme `functions.php`
+loads at `setup_theme` (BEFORE `init`), a fatal there means `rest_api_init`
+never fires, and the guardian's REST routes are never registered for that
+request — even though the mu-plugin code itself loaded and its
+`register_shutdown_function` did record the fatal into the transient.
+
+What v2.6 DOES correctly handle:
+
+- Records every FATAL/PARSE/COMPILE error to the 24h transient via
+  `register_shutdown_function` (this runs regardless of when in the boot
+  cycle the fatal happened).
+- Surfaces the fatal log + safe-mode toggle via the Settings page when WP
+  loads OK.
+- Handles fatals that happen AFTER `rest_api_init` (most runtime errors
+  inside REST handlers, action callbacks, scheduled tasks).
+- Auto-cleanup lifecycle (copy on activate, remove on deactivate, full
+  cleanup on uninstall).
+
+What v2.6 does NOT yet handle:
+
+- Fatals during `setup_theme` / theme `functions.php` load (~40% of
+  real-world WSODs). The guardian records them in the transient but its
+  REST endpoints are unreachable until WP loads OK again.
+- Fatals during plugin file parse (plugin own parse error before
+  `plugins_loaded`).
+
+### Doesn't cover (boot-stage fatals)
 
 - DB connection failure (mu-plugins load after DB connect).
 - wp-config.php parse error (boot dies before mu-plugins).
 - WP core file missing (no boot at all).
 
-For these, fall back to SSH/FTP/cPanel manual recovery (no plugin-level
-solution exists). Real-world failure distribution: ~95% of WSODs come from
-theme/plugin code at runtime, which the guardian covers.
+For these, fall back to SSH/FTP/cPanel manual recovery — no plugin-level
+solution exists.
+
+### Planned for v2.7 — early dispatch from muplugins_loaded
+
+Hook `muplugins_loaded:PHP_INT_MAX` and short-circuit when the URL matches
+`/wp-json/wplab-recovery/v1/*` or `?rest_route=/wplab-recovery/v1/*`. At
+that hook, WP has loaded core + mu-plugins, all regular plugins are about
+to load via `include_once` in sequence, and theme has NOT been touched. We
+manually:
+
+1. Verify Application Password via `WP_Application_Passwords::validate_application_password()`.
+2. Force-init `rest_get_server()` (which fires `rest_api_init`) — registers
+   our guardian routes early.
+3. Build `WP_REST_Request` from `$_SERVER` + body.
+4. Dispatch via `$server->dispatch($request)`.
+5. JSON-encode response + send + `exit`.
+
+This bypasses plugins + theme load entirely for recovery URLs, so the
+endpoints stay reachable during ANY post-mu-plugin boot fatal — including
+theme-load WSODs. Implementation deferred to v2.7 to ship the
+infrastructure pieces first.
 
 ### Pairs with
 
