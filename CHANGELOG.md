@@ -82,6 +82,41 @@ happens. WP's own WSOD-protection (5.2+ Recovery Mode) uses the same
 trick — we extend it with a REST recovery channel instead of email-based
 recovery links.
 
+## [2.7.1] — 2026-05-27 — `wp-content/uploads/wplab-tmp/` auto-mkdir + new `/db-query` endpoint
+
+Closes 2 of 3 sub-gaps surfaced during MCP v1.10.1 retest.
+
+### Fixed — `wp-cli` endpoint auto-creates `wp-content/uploads/wplab-tmp/`
+
+`backup_create` failed with `mysqldump: Can't create/write to file 'wp-content/uploads/wplab-tmp/backup-X.sql' (OS errno 2 - No such file or directory)` because the scratch dir didn't exist on first call. `WpCli::handle()` now calls `wp_mkdir_p(WP_CONTENT_DIR . '/uploads/wplab-tmp')` before exec. Idempotent + cheap.
+
+### Added — `POST /wp-json/wplab/v1/db-query`
+
+Read-only DB query endpoint that bypasses two wp-cli `db query` hazards:
+
+1. **No `{prefix}` substitution in wp-cli** — `wp db query` passes SQL literal to mysql. MCP `diagnose` tool wrote `FROM {prefix}postmeta` expecting substitution, got "Unknown table" error. The new endpoint replaces `{prefix}` with `$wpdb->prefix` server-side.
+2. **Shell escaping of SQL with quotes** — SQL containing single/double quotes is brittle through `exec()`. The new endpoint accepts SQL via JSON body, binds params via `$wpdb->prepare`.
+
+Safety:
+- Refuses any statement that isn't a pure `SELECT` / `SHOW` / `DESCRIBE` / `EXPLAIN` / `WITH` (anchor check on comment-stripped trimmed query).
+- Requires session token + `manage_options`.
+- Audit-logged with sql_preview + row count.
+
+Body shape:
+```json
+{ "session_token": "...", "sql": "SELECT * FROM {prefix}options LIMIT 10", "params": [] }
+```
+
+Response:
+```json
+{ "ok": true, "rows": [{...}, ...], "count": N, "audit_id": "..." }
+```
+
+### Pairs with
+
+`@rolepod/wplab` v1.11.0 — `Bridge.dbQuery()` + diagnose tool routes
+through the new endpoint when target is RestTarget + companion.
+
 ## [2.7.0] — 2026-05-27 — `/option-set` + `/option-get` endpoints + server-side ledger capture in `/execute-php`
 
 ### Added — `POST /wp-json/wplab/v1/option-set` + `POST /option-get`

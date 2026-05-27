@@ -120,6 +120,16 @@ final class WpCli
             ], 403);
         }
 
+        // Ensure scratch dir exists before any wp-cli call. Many ops write to
+        // wp-content/uploads/wplab-tmp/ (db export, backup, restore staging,
+        // diagnostic dumps). v2.7.0 backup_create failed with "mysqldump:
+        // Can't create/write to file ... (errno 2)" because this dir didn't
+        // exist on first call. wp_mkdir_p is idempotent + cheap.
+        $scratchDir = WP_CONTENT_DIR . '/uploads/wplab-tmp';
+        if (!is_dir($scratchDir)) {
+            wp_mkdir_p($scratchDir);
+        }
+
         $escapedArgs = array_map('escapeshellarg', $args);
         $cmd = 'php ' . escapeshellarg($phar) . ' --path=' . escapeshellarg($wpPath)
             . ' --no-color ' . implode(' ', $escapedArgs) . ' 2>&1';
