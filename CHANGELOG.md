@@ -4,6 +4,49 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.8.8] — 2026-05-27 — Drop "Production hostnames" UI, strengthen execute-php warning
+
+### Why
+
+User audit found the "Production hostnames" field had two UX problems:
+
+1. **Silent failure on typo.** A bad pattern (missing dot, trailing
+   slash, scheme prefix) doesn't match → guard returns `false` → site
+   is treated as non-production → execute-php works. User thinks they
+   are protected; they aren't.
+2. **Redundant.** The single execute-php toggle is already the
+   on/off for arbitrary PHP. Adding a second whitelist on top of it
+   creates a false sense of defense-in-depth without actually
+   delivering one (because of #1).
+
+A clearer mental model: **one toggle owns the decision**, with copy
+that makes the production risk explicit. The user is responsible for
+not flipping it on a live customer site — same model as plenty of
+other admin-only WP plugins that ship a "developer mode" toggle.
+
+### Changed
+
+- Removed the **Production hostnames** row from Settings.
+- Execute-php toggle copy rewritten:
+  > Lets the MCP run arbitrary PHP on this site. Even when ON, every
+  > call still needs a valid session token and an AST-screen-clean
+  > payload — but if you turn this on for a live customer site, an AI
+  > mistake can take the site down. **Recommended: keep OFF on
+  > production. Turn ON only on dev/staging.**
+- Badge upgraded: `Dangerous` → `Dangerous for production`.
+- `handleSave()` no longer touches `production_hosts`.
+
+### Back-compat
+
+- The `production_hosts` key in `rolepod_wp_config` is **preserved**
+  (Config::update uses array_merge, not full replace). Existing
+  installs that set patterns via wp-cli or older UI keep working.
+- `ProductionGuard::isProduction()` still functions; it just stops
+  being settable from the admin UI.
+- `is_production` flag in `/handshake` and `/pair` responses unchanged.
+- Power users can still set the option directly:
+  `wp option patch update rolepod_wp_config production_hosts '["mysite.com"]' --format=json`
+
 ## [2.8.7] — 2026-05-27 — Audit log timeline scrolls inside a fixed-height container
 
 Settings page rendered all 50 audit entries inline → very tall page,

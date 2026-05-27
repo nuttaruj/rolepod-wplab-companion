@@ -54,7 +54,6 @@ final class SettingsPage
         $config = Config::all();
         $endpointsEnabled = (bool) ($config['endpoints_enabled'] ?? false);
         $executePhpEnabled = (bool) ($config['execute_php_enabled'] ?? false);
-        $prodHosts = implode(', ', Config::productionHosts());
 
         $guardianInstalled = Guardian::isInstalled();
         $guardianPath = Guardian::destinationPath();
@@ -114,24 +113,15 @@ final class SettingsPage
                             <div class="rp-toggle-row <?php echo $executePhpEnabled ? 'is-danger' : ''; ?>">
                                 <div class="rp-toggle-icon"><?php echo self::iconCode(); ?></div>
                                 <div class="rp-toggle-body">
-                                    <strong>Enable <code>POST /execute-php</code> <span class="rp-badge rp-badge-danger" style="margin-left:6px;">Dangerous</span></strong>
-                                    <div class="rp-desc">Even when ON, every call requires a valid session token, an AST-screen-clean payload, and a non-production siteurl. Production-matched targets refuse regardless of this toggle.</div>
+                                    <strong>Enable <code>POST /execute-php</code> <span class="rp-badge rp-badge-danger" style="margin-left:6px;">Dangerous for production</span></strong>
+                                    <div class="rp-desc">
+                                        Lets the MCP run arbitrary PHP on this site. Even when ON, every call still needs a valid session token and an AST-screen-clean payload &mdash; but if you turn this on for a live customer site, an AI mistake can take the site down. <strong>Recommended: keep OFF on production. Turn ON only on dev/staging.</strong>
+                                    </div>
                                 </div>
                                 <label class="rp-toggle">
                                     <input type="checkbox" name="execute_php_enabled" value="1" <?php checked($executePhpEnabled); ?>>
                                     <span class="rp-toggle-track"></span>
                                 </label>
-                            </div>
-
-                            <div class="rp-toggle-row" style="flex-direction:column;align-items:stretch;gap:8px;">
-                                <div style="display:flex;gap:14px;">
-                                    <div class="rp-toggle-icon"><?php echo self::iconShield(); ?></div>
-                                    <div class="rp-toggle-body">
-                                        <strong>Production hostnames</strong>
-                                        <div class="rp-desc">Comma-separated glob patterns. If <code>siteurl</code> matches any of these, <code>execute-php</code> is unconditionally refused.</div>
-                                    </div>
-                                </div>
-                                <input type="text" name="production_hosts" class="rp-input rp-input-mono" placeholder="e.g. mysite.com, *.client-prod.com" value="<?php echo esc_attr($prodHosts); ?>" style="margin-left:50px;width:calc(100% - 50px);">
                             </div>
 
                         </div>
@@ -365,20 +355,14 @@ final class SettingsPage
 
     private static function handleSave(): void
     {
-        $endpointsEnabled = isset($_POST['endpoints_enabled']);
-        $executePhpEnabled = isset($_POST['execute_php_enabled']);
-        $rawProdHosts = isset($_POST['production_hosts'])
-            ? sanitize_text_field((string) wp_unslash($_POST['production_hosts']))
-            : '';
-        $prodHosts = array_values(array_filter(
-            array_map('trim', explode(',', $rawProdHosts)),
-            'strlen'
-        ));
-
+        // v2.8.8 removed the "Production hostnames" UI — the lone
+        // execute-php toggle is now the single source of truth for whether
+        // the MCP can run arbitrary PHP. The `production_hosts` config key
+        // is preserved as-is (not touched here) for back-compat with any
+        // power-user / WP-CLI workflow that still sets it.
         Config::update([
-            'endpoints_enabled' => $endpointsEnabled,
-            'execute_php_enabled' => $executePhpEnabled,
-            'production_hosts' => $prodHosts,
+            'endpoints_enabled'   => isset($_POST['endpoints_enabled']),
+            'execute_php_enabled' => isset($_POST['execute_php_enabled']),
         ]);
     }
 
