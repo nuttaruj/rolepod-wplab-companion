@@ -23,9 +23,18 @@ final class Config
         return is_array($raw) ? $raw : [];
     }
 
+    /**
+     * v2.8.9: deprecated. Plugin activation is now the single consent
+     * gate for read + scoped-write endpoints. Always returns true so
+     * the existing permission-callback guard pattern keeps working but
+     * never blocks. Execute-php still has its own opt-in toggle.
+     *
+     * Stored `endpoints_enabled` value is ignored. Power users who need
+     * a kill switch should deactivate the plugin.
+     */
     public static function endpointsEnabled(): bool
     {
-        return (bool) (self::all()['endpoints_enabled'] ?? false);
+        return true;
     }
 
     public static function executePhpEnabled(): bool

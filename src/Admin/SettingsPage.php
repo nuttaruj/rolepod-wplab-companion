@@ -52,7 +52,6 @@ final class SettingsPage
         }
 
         $config = Config::all();
-        $endpointsEnabled = (bool) ($config['endpoints_enabled'] ?? false);
         $executePhpEnabled = (bool) ($config['execute_php_enabled'] ?? false);
 
         $guardianInstalled = Guardian::isInstalled();
@@ -97,18 +96,6 @@ final class SettingsPage
                             <span class="rp-badge rp-badge-neutral">Guarded</span>
                         </div>
                         <div class="rp-card-pad" style="padding-top:4px;padding-bottom:4px;">
-
-                            <div class="rp-toggle-row <?php echo $endpointsEnabled ? 'is-on' : ''; ?>">
-                                <div class="rp-toggle-icon"><?php echo self::iconPlug(); ?></div>
-                                <div class="rp-toggle-body">
-                                    <strong>Enable companion REST endpoints</strong>
-                                    <div class="rp-desc">Master toggle for the <code>/wplab/v1/*</code> surface. When OFF every endpoint returns <code>403</code> regardless of credentials. Turn ON only when you actively use the Node MCP.</div>
-                                </div>
-                                <label class="rp-toggle">
-                                    <input type="checkbox" name="endpoints_enabled" value="1" <?php checked($endpointsEnabled); ?>>
-                                    <span class="rp-toggle-track"></span>
-                                </label>
-                            </div>
 
                             <div class="rp-toggle-row <?php echo $executePhpEnabled ? 'is-danger' : ''; ?>">
                                 <div class="rp-toggle-icon"><?php echo self::iconCode(); ?></div>
@@ -355,13 +342,12 @@ final class SettingsPage
 
     private static function handleSave(): void
     {
-        // v2.8.8 removed the "Production hostnames" UI — the lone
-        // execute-php toggle is now the single source of truth for whether
-        // the MCP can run arbitrary PHP. The `production_hosts` config key
-        // is preserved as-is (not touched here) for back-compat with any
-        // power-user / WP-CLI workflow that still sets it.
+        // v2.8.9: only execute-php is settable from the UI now. Plugin
+        // activation = consent for read + scoped-write endpoints (master
+        // toggle removed). `endpoints_enabled` and `production_hosts`
+        // keys remain in the option array for back-compat with any
+        // power-user / WP-CLI workflow that still reads them.
         Config::update([
-            'endpoints_enabled'   => isset($_POST['endpoints_enabled']),
             'execute_php_enabled' => isset($_POST['execute_php_enabled']),
         ]);
     }

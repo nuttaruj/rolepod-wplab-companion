@@ -4,6 +4,62 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.8.9] — 2026-05-27 — Drop "Enable companion REST endpoints" master toggle (plugin activation IS consent)
+
+### Why
+
+User report: fresh installs ran the onboarding wizard, mint a pair
+token, paste the prompt to an AI CLI — and the AI got `HTTP 403
+rolepod_wp_disabled` because the master toggle defaulted to OFF.
+Most users never opened Settings during onboarding so the failure was
+silent and confusing.
+
+The toggle was also redundant with plugin activation:
+
+- WordPress already gives admins a single binary control over the
+  plugin: **Plugins → Deactivate**. That IS the kill switch.
+- The execute-php sub-toggle is the real safety surface — it gates
+  arbitrary PHP. Read endpoints (handshake, introspect, fs-read,
+  wp-cli reads) and scoped writes (fs-write under
+  `wp-content/uploads/wplab-{tmp,backups}/`) are low-risk by
+  comparison and behind session_token + manage_options.
+
+### Changed
+
+- **`Config::endpointsEnabled()` always returns `true`.** The stored
+  `endpoints_enabled` value is ignored. Existing endpoint
+  permission-callback guards (`if (!Config::endpointsEnabled())…`)
+  stay in place as defensive code but never block.
+- **Settings UI**: master toggle row removed. Only execute-php remains.
+- **`handleSave()`**: no longer writes `endpoints_enabled`.
+- **Shell header status dot**: now reflects execute-php state
+  (`execute-php ON` / `execute-php OFF`) — the only remaining
+  user-controlled gate and the one that actually matters for "is this
+  a live customer site or dev/staging".
+- **Fresh-install default**: `execute_php_enabled` flipped to `false`.
+  Previously it was `true` (gated behind the master toggle being ON).
+  Now that master is gone, OFF-by-default for arbitrary-PHP is the
+  safer posture. Admin must explicitly turn it on for dev/staging.
+
+### Back-compat
+
+- `endpoints_enabled` key is preserved in the option array for any
+  external reader; value is ignored at runtime.
+- Existing installs that had `execute_php_enabled = true` keep that
+  setting (add_option no-ops when the option already exists).
+- Power user who needs a kill switch should deactivate the plugin —
+  same effect as the old master toggle, plus more visible in the
+  WordPress admin.
+- `ProductionGuard` + `production_hosts` config key untouched (also
+  preserved for back-compat).
+
+### Migration
+
+None required. The change is invisible to existing installs except:
+- Settings page now shows one row instead of two
+- Header status dot label changed
+- New installs no longer need to flip a switch to start
+
 ## [2.8.8] — 2026-05-27 — Drop "Production hostnames" UI, strengthen execute-php warning
 
 ### Why
