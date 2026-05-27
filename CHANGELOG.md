@@ -82,6 +82,30 @@ happens. WP's own WSOD-protection (5.2+ Recovery Mode) uses the same
 trick — we extend it with a REST recovery channel instead of email-based
 recovery links.
 
+## [2.6.3] — 2026-05-27 — Guardian self-upgrade on plugin update
+
+Fix: v2.6.2 install on a site already running v2.6.0 left the OLD
+guardian file in place. The plugins_loaded:5 hook only re-copied when
+`Guardian::isInstalled()` was false. With a file already present, that
+check returned true and skipped the overwrite — so the user's site kept
+running the v2.6.0 guardian even after upgrading the main plugin to
+v2.6.2.
+
+### Added — `Guardian::isInstalledAtCurrentVersion()` + `readVersion()`
+
+Reads the `ROLEPOD_WP_GUARDIAN_VERSION` define from the first 4 KB of any
+guardian file via regex. Cheap (no eval / no autoload). The
+plugins_loaded:5 hook now compares installed-version to bundled-version
+and overwrites when they differ. Side benefit: downgrade scenarios also
+trigger a reinstall (rolls back the guardian to match plugin code).
+
+### Verified on demo
+
+Hostinger demo: v2.6.0 → v2.6.2 plugin upgrade left guardian at v2.6.0.
+After v2.6.3, same upgrade path correctly brings guardian to v2.6.3 on
+the first post-upgrade request (the plugins_loaded:5 hook fires
+every request and is cheap when no copy is needed).
+
 ## [2.6.2] — 2026-05-27 — Best-practice auth hardening (pluggable load order + REDIRECT_HTTP_AUTHORIZATION)
 
 Two correctness fixes in the early-dispatch path.

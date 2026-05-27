@@ -5,7 +5,7 @@
  * Description:       The WordPress arm of the Rolepod ecosystem (https://github.com/nuttaruj/rolepod). Exposes guarded REST endpoints so AI coding agents (Claude Code / Cursor / Codex / Gemini) — driven by the rolepod-wplab MCP server — can run runtime introspection, the one-click pair wizard, and (with explicit opt-in) execute-php on this WordPress install. Endpoints are OFF by default; enable per-feature in Settings → Rolepod for WordPress. v2.6 adds a mu-plugin recovery guardian that survives main-plugin parse/fatal errors.
  * Author:            nuttaruj
  * Author URI:        https://github.com/nuttaruj
- * Version:           2.6.2
+ * Version:           2.6.3
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * License:           MIT
@@ -21,7 +21,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ROLEPOD_WP_VERSION', '2.6.2');
+define('ROLEPOD_WP_VERSION', '2.6.3');
 define('ROLEPOD_WP_FILE', __FILE__);
 define('ROLEPOD_WP_DIR', plugin_dir_path(__FILE__));
 
@@ -89,7 +89,10 @@ add_action('plugins_loaded', static function (): void {
     if ($current !== \Rolepod\Wp\Audit\ChangeLedger::TABLE_VERSION) {
         \Rolepod\Wp\Audit\ChangeLedger::install();
     }
-    if (!\Rolepod\Wp\Guardian::isInstalled()) {
+    if (!\Rolepod\Wp\Guardian::isInstalledAtCurrentVersion()) {
+        // Either not installed at all, or installed copy is from an older
+        // plugin release (upgrade scenario). Re-copy to bring guardian to
+        // the bundled version. Idempotent + cheap (single file copy).
         \Rolepod\Wp\Guardian::install();
     }
 }, 5);

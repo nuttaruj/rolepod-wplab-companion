@@ -35,6 +35,48 @@ final class Guardian
     }
 
     /**
+     * Read the ROLEPOD_WP_GUARDIAN_VERSION constant value from a guardian file
+     * by regex (cheap — no eval / no autoload). Returns null if file missing
+     * or version line not found.
+     */
+    public static function readVersion(string $path): ?string
+    {
+        if (!is_file($path)) {
+            return null;
+        }
+        // Read first 4 KB — the version define lives near the top of the file.
+        $head = (string) @file_get_contents($path, false, null, 0, 4096);
+        if ($head === '') {
+            return null;
+        }
+        if (preg_match("/define\\(\\s*'ROLEPOD_WP_GUARDIAN_VERSION'\\s*,\\s*'([0-9.]+)'\\s*\\)/", $head, $m)) {
+            return $m[1];
+        }
+        return null;
+    }
+
+    /**
+     * True when the installed guardian matches the source guardian's version.
+     * False when not installed OR when installed copy is older/newer than
+     * what main plugin ships. Used by plugins_loaded:5 hook to decide
+     * whether to overwrite the installed guardian on plugin update.
+     */
+    public static function isInstalledAtCurrentVersion(): bool
+    {
+        $installed = self::readVersion(self::destinationPath());
+        if ($installed === null) {
+            return false;
+        }
+        $source = self::readVersion(self::sourcePath());
+        if ($source === null) {
+            // Source missing — can't compare; treat as up-to-date to avoid
+            // pointless reinstall loops if package is broken.
+            return true;
+        }
+        return $installed === $source;
+    }
+
+    /**
      * Copy guardian into the mu-plugins dir. Creates the dir if missing.
      * Returns array{ok: bool, path: string, error?: string}.
      */
