@@ -82,6 +82,140 @@ happens. WP's own WSOD-protection (5.2+ Recovery Mode) uses the same
 trick — we extend it with a REST recovery channel instead of email-based
 recovery links.
 
+## [2.6.9] — 2026-05-27 — Improved /status semantics + dispatch_path field
+
+Fix consequence of v2.6.8 design: `main_alive` in `/status` was being
+computed from `defined('ROLEPOD_WP_VERSION')`. That was true on the
+normal REST path (rest_api_init fires after main plugin loaded) but
+FALSE on the early-dispatch path (we shortcircuit at muplugins_loaded,
+before main loads). The misleading signal told AI consumers "main is
+down" when it was actually fine.
+
+### Changed — `main_alive` now infers from active_plugins + filesystem
+
+`main_alive` is now true when ALL of:
+- `rolepod-wp/rolepod-wp.php` is in the `active_plugins` option.
+- The main plugin file exists on disk.
+- `.disabled` form does NOT exist (would mean guardian or admin disabled it).
+
+This is a "next regular request will boot main" predictor. To know if
+the LAST request actually loaded main cleanly, check `recent_fatals` for
+fatals in `wp-content/plugins/rolepod-wp/`.
+
+### Added — `dispatch_path`, `main_active_in_options`, `main_file_disabled` fields
+
+- `dispatch_path`: `"rest_api_init"` (WP fully booted, normal REST path)
+  or `"early_dispatch"` (muplugins_loaded shortcircuit). Lets AI know
+  whether this response came through the recovery path.
+- `main_active_in_options`: bool — straight read from active_plugins.
+- `main_file_disabled`: bool — `.disabled` form exists.
+- `main_version`: now extracted from main plugin's `Version:` header
+  via regex (cheap, no autoload, safe even if main fatals at load).
+
+## [2.6.8] — 2026-05-27 — Manual WP_REST_Server (skip rest_api_init / create_initial_rest_routes)
+
+v2.6.7 ran cleanly past auth, but next layer hit:
+
+```
+PHP Fatal error: Uncaught Error: Class "WP_Site_Health" not found in
+wp-includes/rest-api.php:396
+```
+
+Root cause: v2.6.7's early-dispatch called `rest_get_server()` which
+fires `rest_api_init` action → WP-core's `create_initial_rest_routes()`
+→ references `WP_Site_Health` class (loaded much later in WP boot via
+admin includes). At muplugins_loaded that class isn't around yet.
+
+### Fix — manual server, manual route registration
+
+Refactored route registration into
+`rolepod_guardian_register_routes($server = null)`:
+- `$server === null` (normal path): uses `register_rest_route()` which
+  routes through the global REST server during rest_api_init.
+- `$server` passed (early dispatch): registers directly on the passed
+  `WP_REST_Server` via `$server->register_route()` — bypasses
+  `register_rest_route()`'s global state AND avoids firing
+  `rest_api_init`.
+
+Early dispatch now does:
+```php
+require_once ABSPATH . WPINC . '/rest-api.php';
+require_once ABSPATH . WPINC . '/rest-api/class-wp-rest-server.php';
+require_once ABSPATH . WPINC . '/rest-api/class-wp-rest-request.php';
+require_once ABSPATH . WPINC . '/rest-api/class-wp-rest-response.php';
+$server = new WP_REST_Server();
+rolepod_guardian_register_routes($server);  // only OUR routes
+$response = $server->dispatch($request);
+```
+
+The early-dispatch server only knows about guardian routes — no WP-core
+REST controllers, no plugin REST endpoints. That's intentional: in
+recovery mode we want isolation, not "everything WP would normally serve".
+
+### Architectural lesson
+
+Firing `rest_api_init` manually pulls in the entire WP-core REST init
+sequence which depends on classes loaded throughout WP boot. For a true
+out-of-band escape hatch, instantiate a minimal `WP_REST_Server` and
+register only the routes you control. Don't try to piggy-back on
+WP-core's REST init — it's a tar pit at early load phases.
+
+### Verified end-to-end on demo
+
+After installing v2.6.8 over a broken site:
+- `/wp-json/wplab-recovery/v1/status` → 200 with JSON ✅
+- `/wp-json/wplab-recovery/v1/disable-file` → renamed
+  `wp-content/themes/twentytwentyfive/functions.php` → `.disabled` ✅
+- WP front-end + main REST recovered ✅
+- All 8 guardian endpoints (status, disable-plugin, disable-file,
+  restore-file, restore-snapshot, list-changes, safe-mode, clear-fatals)
+  smoke-tested ✅
+
+## [2.6.7] — 2026-05-27 — Delegate to wp_authenticate_application_password() (handles WP 7.0 hash normalization)
+
+v2.6.5 inlined the iterate-and-check pattern from WP-core, calling
+`WP_Application_Passwords::get_user_application_passwords()` then
+`wp_check_password()` on each item. Demo testing in v2.6.6 added debug
+logging which confirmed:
+- `extract_basic_auth()` correctly received `PHP_AUTH_USER=admin` +
+  24-char password from Nginx FastCGI.
+- The Application Passwords WERE retrieved from DB (2 items).
+- `wp_check_password()` against `$item['password']` returned FALSE for
+  both, despite WP-core's own auth path accepting the same credentials.
+
+Root cause: WP 7.0 stores Application Password hashes via the new
+`$generic$` PHC format. `wp_authenticate_application_password()`
+normalizes the input password (trim, NBSP → space, strip whitespace)
+BEFORE hashing for compare. Our inline path skipped that step — raw
+password never matched normalized hash.
+
+### Fix — delegate to wp_authenticate_application_password()
+
+It's a public function (not just a filter callback) and is callable
+from muplugins_loaded once pluggable.php is required. Avoids
+re-implementing every normalization quirk WP-core handles.
+
+```php
+if (function_exists('wp_authenticate_application_password')) {
+    $result = wp_authenticate_application_password(null, $user, $pass);
+    if ($result instanceof \WP_User) return $result;
+}
+// plain-password fallback for local dev / CI
+```
+
+Removed v2.6.6 debug logging (one-shot diagnostic).
+
+## [2.6.6] — 2026-05-27 — Add one-shot debug logging to diagnose 401 on recovery namespace
+
+v2.6.5 deployed without WSOD but returned `rest_not_logged_in` 401 for
+every recovery call. Server probe (via `/wplab/v1/execute-php`) confirmed
+Nginx populates `PHP_AUTH_USER` + `PHP_AUTH_PW` correctly at runtime —
+so the 401 meant our `authenticate()` returned null for some other
+reason. Added temporary FILE_APPEND log to
+`wp-content/uploads/rolepod-guardian-debug.log` capturing extracted
+user/pass-length + `$_SERVER` auth keys present + REQUEST_URI. Confirmed
+extraction works → narrowed bug to the hash compare step (fixed in v2.6.7).
+
 ## [2.6.5] — 2026-05-27 — Fix WP_Application_Passwords API (use get_user_application_passwords + wp_check_password)
 
 v2.6.4 fixed the pluggable.php load order. Demo retest then exposed the

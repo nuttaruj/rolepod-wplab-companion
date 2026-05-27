@@ -22,7 +22,7 @@ if (defined('ROLEPOD_WP_GUARDIAN_VERSION')) {
     // Another copy already loaded — don't double-register.
     return;
 }
-define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.8');
+define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.9');
 define('ROLEPOD_WP_GUARDIAN_NAMESPACE', 'wplab-recovery/v1');
 define('ROLEPOD_WP_GUARDIAN_FATALS_TRANSIENT', 'rolepod_wp_recovery_recent_fatals');
 define('ROLEPOD_WP_GUARDIAN_SAFE_MODE_OPTION', 'rolepod_wp_safe_mode');
@@ -168,8 +168,37 @@ function rolepod_guardian_register_routes(?\WP_REST_Server $server = null): void
  */
 function rolepod_guardian_status(): WP_REST_Response
 {
-    $mainAlive = defined('ROLEPOD_WP_VERSION');
-    $mainVersion = defined('ROLEPOD_WP_VERSION') ? constant('ROLEPOD_WP_VERSION') : null;
+    // `main_alive` here would mean "main plugin already loaded into this
+    // request" which is true on the normal REST path (rest_api_init fires
+    // after plugin load) but FALSE on the early-dispatch path (we
+    // shortcircuit at muplugins_loaded, before plugins). That semantic
+    // is misleading for AI consumers: in early dispatch they'd see
+    // main_alive=false even when main is perfectly healthy.
+    //
+    // Better signal: infer "main will load on next regular request" by
+    // checking active_plugins option + file existence. If main is in
+    // active_plugins AND its file isn't .disabled, the next normal
+    // request will load it.
+    $mainProbablyAlive = false;
+    $mainFile = WP_PLUGIN_DIR . '/rolepod-wp/rolepod-wp.php';
+    $mainDisabled = WP_PLUGIN_DIR . '/rolepod-wp/rolepod-wp.php.disabled';
+    $active = (array) get_option('active_plugins', []);
+    $isActive = in_array('rolepod-wp/rolepod-wp.php', $active, true);
+    if ($isActive && is_file($mainFile) && !is_file($mainDisabled)) {
+        $mainProbablyAlive = true;
+    }
+
+    // If main plugin file is present, try to read its Version header
+    // without including it (a fatal in main would WSOD this request).
+    $mainVersion = null;
+    if (is_file($mainFile)) {
+        $head = (string) @file_get_contents($mainFile, false, null, 0, 4096);
+        if ($head !== '' && preg_match('/^\s*\*\s*Version:\s*([0-9A-Za-z.\-]+)/m', $head, $m)) {
+            $mainVersion = $m[1];
+        }
+    }
+
+    $dispatchPath = defined('ROLEPOD_WP_VERSION') ? 'rest_api_init' : 'early_dispatch';
 
     $recent = get_transient(ROLEPOD_WP_GUARDIAN_FATALS_TRANSIENT);
     if (!is_array($recent)) {
@@ -181,8 +210,18 @@ function rolepod_guardian_status(): WP_REST_Response
     return new WP_REST_Response([
         'ok' => true,
         'guardian_version' => ROLEPOD_WP_GUARDIAN_VERSION,
-        'main_alive' => $mainAlive,
+        // True iff main plugin file exists, is active, and not .disabled.
+        // Recent fatals in recent_fatals indicate if it actually loads
+        // cleanly on a normal request.
+        'main_alive' => $mainProbablyAlive,
         'main_version' => $mainVersion,
+        'main_active_in_options' => $isActive,
+        'main_file_disabled' => is_file($mainDisabled),
+        // Which guardian dispatch path served this response:
+        //   "rest_api_init"  = WP fully booted, main plugin loaded normally.
+        //   "early_dispatch" = muplugins_loaded shortcircuit (we never
+        //                      loaded plugins/theme for this request).
+        'dispatch_path' => $dispatchPath,
         'safe_mode' => (bool) get_option(ROLEPOD_WP_GUARDIAN_SAFE_MODE_OPTION, false),
         'recent_fatals' => array_values($recent),
         'last_fatal' => $lastFatal,
