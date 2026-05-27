@@ -30,7 +30,7 @@ final class PanicRevertAbility
             [
                 'label'       => __('Rolepod panic revert', 'rolepod-wp'),
                 'description' => __('Disable every reversible AI-issued change made in the last N minutes (1-1440). Requires explicit confirm:true. Destructive but row-by-row reversible.', 'rolepod-wp'),
-                'category'    => 'content',
+                'category'    => 'rolepod',
                 'input_schema' => [
                     'type'       => 'object',
                     'required'   => ['confirm', 'minutes'],

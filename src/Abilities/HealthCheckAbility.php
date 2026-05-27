@@ -26,7 +26,7 @@ final class HealthCheckAbility
             [
                 'label'       => __('Rolepod health check', 'rolepod-wp'),
                 'description' => __('Returns the plugin version, guardian status, and whether execute-php is enabled. Safe read-only diagnostic.', 'rolepod-wp'),
-                'category'    => 'site',
+                'category'    => 'rolepod',
                 'input_schema' => [
                     'type'       => 'object',
                     'properties' => new \stdClass(),

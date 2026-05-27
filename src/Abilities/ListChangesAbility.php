@@ -25,7 +25,7 @@ final class ListChangesAbility
             [
                 'label'       => __('List recent Rolepod changes', 'rolepod-wp'),
                 'description' => __('Returns recent rows from the AI Change Ledger (writes the MCP issued through this site). Filter by category and limit.', 'rolepod-wp'),
-                'category'    => 'content',
+                'category'    => 'rolepod',
                 'input_schema' => [
                     'type'       => 'object',
                     'properties' => [

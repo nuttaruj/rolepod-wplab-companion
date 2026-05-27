@@ -57,6 +57,17 @@ final class Bridge
         if (!self::isAvailable()) {
             return;
         }
+        // WP 7.0 requires ability categories to be pre-registered. Built-in
+        // categories are `site`, `user`, `woocommerce-rest`, `yoast-seo`.
+        // We register `rolepod` so all our abilities share a clean,
+        // namespaced grouping in any UI that surfaces categories.
+        if (function_exists('wp_register_ability_category')) {
+            wp_register_ability_category('rolepod', [
+                'label'       => __('Rolepod', 'rolepod-wp'),
+                'description' => __('Abilities exposed by the Rolepod for WordPress companion plugin.', 'rolepod-wp'),
+            ]);
+        }
+
         HealthCheckAbility::register();
         ListChangesAbility::register();
         PanicRevertAbility::register();

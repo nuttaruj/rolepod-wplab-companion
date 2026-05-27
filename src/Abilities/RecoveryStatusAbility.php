@@ -24,7 +24,7 @@ final class RecoveryStatusAbility
             [
                 'label'       => __('Rolepod recovery status', 'rolepod-wp'),
                 'description' => __('Returns mu-plugin guardian status, the last few PHP fatals caught by it, and whether safe-mode is on.', 'rolepod-wp'),
-                'category'    => 'site',
+                'category'    => 'rolepod',
                 'input_schema' => [
                     'type'       => 'object',
                     'properties' => new \stdClass(),

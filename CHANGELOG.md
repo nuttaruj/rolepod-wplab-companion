@@ -4,6 +4,35 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.10.1] — 2026-05-27 — Register ability category before use (Abilities API requirement)
+
+v2.10.0 shipped 4 abilities but only 2 (`health-check`, `recovery-status`)
+actually registered at runtime. Browser/REST audit showed
+`/wp-json/wp-abilities/v1/abilities` listed only those two; the other
+two silently no-oped during init.
+
+### Root cause
+
+`WP_Abilities_Registry::register()` validates that the `category`
+arg points to an already-registered category, and on miss calls
+`_doing_it_wrong()` + returns `null` — silent at runtime, only
+visible with `WP_DEBUG_LOG`. WP 7.0 core ships these built-in
+categories: `site`, `user`, `woocommerce-rest`, `yoast-seo`.
+
+`HealthCheckAbility` (category `site`) and `RecoveryStatusAbility`
+(category `site`) hit a built-in slug → registered fine.
+
+`ListChangesAbility` (category `content`) and `PanicRevertAbility`
+(category `content`) hit an unregistered slug → silent failure.
+
+### Fix
+
+`Bridge::registerAll()` now calls `wp_register_ability_category()`
+to declare a namespaced `rolepod` category before registering any
+abilities, and all four abilities now use `category: 'rolepod'`.
+Cleaner — one Rolepod-owned grouping in any UI that surfaces
+categories, no reliance on built-in slugs whose meaning could shift.
+
 ## [2.10.0] — 2026-05-27 — WordPress 7.0 Abilities API bridge (initial curated batch)
 
 ### Why
