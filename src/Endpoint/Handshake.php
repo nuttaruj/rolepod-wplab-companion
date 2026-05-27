@@ -60,6 +60,9 @@ final class Handshake
         if (Config::executePhpEnabled() && !ProductionGuard::isProduction()) {
             $capabilities[] = 'execute_php';
         }
+        if (\Rolepod\Wp\Abilities\Bridge::isAvailable()) {
+            $capabilities[] = 'abilities_api';
+        }
 
         $matchedPattern = ProductionGuard::matchedPattern();
 
@@ -71,6 +74,10 @@ final class Handshake
             'is_production' => $matchedPattern !== null,
             'production_pattern_matched' => $matchedPattern,
             'capabilities' => $capabilities,
+            'abilities_api' => [
+                'available'  => \Rolepod\Wp\Abilities\Bridge::isAvailable(),
+                'registered' => \Rolepod\Wp\Abilities\Bridge::registered(),
+            ],
             'session_token' => $token,
             'session_ttl_seconds' => SessionToken::ttlSeconds(),
         ], 200);

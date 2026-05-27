@@ -4,6 +4,94 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.10.0] — 2026-05-27 — WordPress 7.0 Abilities API bridge (initial curated batch)
+
+### Why
+
+WordPress 7.0 "Armstrong" (released 2026-05-20) ships a native AI
+stack in core: an Abilities API (server-side capability registry),
+a WP AI Client (provider-agnostic Anthropic/OpenAI/Gemini interface),
+and a Connectors hub. This means an admin using WP 7.0's built-in AI
+assistant can discover and invoke any plugin's registered abilities
+directly — no external MCP CLI required.
+
+Rolepod already exposes ~89 tools via the rolepod-wplab MCP server.
+This release bridges a curated subset into the Abilities registry
+so in-admin AI consumers see them alongside any other plugin's
+abilities. The legacy `/wp-json/wplab/v1/*` REST surface that the
+external MCP CLI uses is unchanged — both consumers coexist.
+
+### Added — `src/Abilities/`
+
+New namespace, one file per ability for clean review:
+
+- **`Bridge.php`** — bootstrap. Detects `wp_register_ability()` at
+  runtime; no-ops cleanly on WP < 7.0. Registers everything from
+  the `wp_abilities_api_init` action hook.
+- **`HealthCheckAbility.php`** → `rolepod/health-check`
+  Returns plugin + WP + PHP version, guardian status, execute-php
+  state, safe-mode flag. Pure read.
+- **`ListChangesAbility.php`** → `rolepod/list-changes`
+  Returns recent Change Ledger rows with optional category +
+  limit filter. Pure read.
+- **`PanicRevertAbility.php`** → `rolepod/panic-revert`
+  Disables every reversible change in the last N minutes (1-1440).
+  Requires explicit `confirm: true` flag — soft gate against
+  speculative AI invocation.
+- **`RecoveryStatusAbility.php`** → `rolepod/recovery-status`
+  Returns guardian install status + recent PHP fatals + safe-mode.
+
+All abilities:
+- Use `category: 'site'` or `category: 'content'`
+- Gate on `current_user_can('manage_options')` via
+  `Bridge::adminPermission()`
+- Have `show_in_rest: true` so they appear under
+  `/wp-json/wp-abilities/v1/...`
+- Mirror existing Rolepod domain code (no new behavior introduced
+  via the Abilities surface)
+
+### Added — Handshake capability flag
+
+`/wp-json/wplab/v1/handshake` response now includes:
+
+```json
+{
+  "capabilities": ["...", "abilities_api"],
+  "abilities_api": {
+    "available": true,
+    "registered": [
+      "rolepod/health-check",
+      "rolepod/list-changes",
+      "rolepod/panic-revert",
+      "rolepod/recovery-status"
+    ]
+  }
+}
+```
+
+Existing fields unchanged. MCP client v1.12+ can now route
+ability-invokable calls through the native Abilities REST endpoint
+when the server reports the flag, or continue using the legacy
+endpoints when not.
+
+### Not in this batch (planned for follow-ups)
+
+- `rolepod/theme-snapshot` — needs ThemeSnapshot endpoint refactor
+  to extract a callable domain method from the REST handler
+- `rolepod/execute-php` — too dangerous to register without
+  per-ability opt-in UI; skipped intentionally
+- Pair / connect tools — only useful from outside WP; no fit
+- Most write/scaffold tools — schemas need design work to fit
+  Abilities' JSON Schema validation cleanly
+
+### Back-compat
+
+- Pure additive. Zero changes to existing `/wplab/v1/*` endpoints.
+- WP < 7.0: Bridge::init() returns early, no abilities registered,
+  handshake reports `abilities_api.available: false`.
+- No new option keys, no DB writes, no new hooks beyond
+  `wp_abilities_api_init` (the WP-core hook).
+
 ## [2.9.0] — 2026-05-27 — GitHub-based auto-updater (no wp.org listing needed)
 
 ### Why
