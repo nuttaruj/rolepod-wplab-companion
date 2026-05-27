@@ -4,6 +4,31 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.10.2] — 2026-05-27 — Categories use their own action hook (Abilities API)
+
+v2.10.1 still didn't register any abilities. Root cause #2: WP 7.0
+splits the registry into two separate init actions —
+
+- `wp_abilities_api_categories_init` — for `wp_register_ability_category()`
+- `wp_abilities_api_init` — for `wp_register_ability()`
+
+Categories must register on the FIRST hook because the SECOND hook
+validates that every ability's `category` arg points at an already-registered
+slug. Bridge::registerAll() in v2.10.1 tried to call
+`wp_register_ability_category()` from inside the abilities init hook,
+which `_doing_it_wrong` notices reject — the category never registered,
+all four abilities then failed validation against the missing slug.
+
+Fix: Bridge::init() now wires both hooks:
+
+```php
+add_action('wp_abilities_api_categories_init', [self::class, 'registerCategory']);
+add_action('wp_abilities_api_init',            [self::class, 'registerAll']);
+```
+
+`registerCategory()` runs first via WP's natural action order and
+declares `rolepod` so the four ability registers find it.
+
 ## [2.10.1] — 2026-05-27 — Register ability category before use (Abilities API requirement)
 
 v2.10.0 shipped 4 abilities but only 2 (`health-check`, `recovery-status`)

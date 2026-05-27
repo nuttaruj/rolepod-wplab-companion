@@ -49,7 +49,22 @@ final class Bridge
         if (!self::isAvailable()) {
             return;
         }
+        // Categories MUST be registered on their own action hook (different
+        // from the abilities hook) and BEFORE abilities init fires —
+        // WP_Abilities_Registry validates category at ability-register time.
+        add_action('wp_abilities_api_categories_init', [self::class, 'registerCategory']);
         add_action('wp_abilities_api_init', [self::class, 'registerAll']);
+    }
+
+    public static function registerCategory(): void
+    {
+        if (!function_exists('wp_register_ability_category')) {
+            return;
+        }
+        wp_register_ability_category('rolepod', [
+            'label'       => __('Rolepod', 'rolepod-wp'),
+            'description' => __('Abilities exposed by the Rolepod for WordPress companion plugin.', 'rolepod-wp'),
+        ]);
     }
 
     public static function registerAll(): void
@@ -57,17 +72,6 @@ final class Bridge
         if (!self::isAvailable()) {
             return;
         }
-        // WP 7.0 requires ability categories to be pre-registered. Built-in
-        // categories are `site`, `user`, `woocommerce-rest`, `yoast-seo`.
-        // We register `rolepod` so all our abilities share a clean,
-        // namespaced grouping in any UI that surfaces categories.
-        if (function_exists('wp_register_ability_category')) {
-            wp_register_ability_category('rolepod', [
-                'label'       => __('Rolepod', 'rolepod-wp'),
-                'description' => __('Abilities exposed by the Rolepod for WordPress companion plugin.', 'rolepod-wp'),
-            ]);
-        }
-
         HealthCheckAbility::register();
         ListChangesAbility::register();
         PanicRevertAbility::register();
