@@ -16,11 +16,7 @@
     else document.addEventListener('DOMContentLoaded', fn);
   }
 
-  function copyText(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(text);
-    }
-    // Fallback for older browsers
+  function execCommandCopy(text) {
     var ta = document.createElement('textarea');
     ta.value = text;
     ta.style.position = 'fixed';
@@ -30,6 +26,19 @@
     try { document.execCommand('copy'); } catch (e) { /* noop */ }
     document.body.removeChild(ta);
     return Promise.resolve();
+  }
+
+  function copyText(text) {
+    // Try modern Clipboard API first, but fall back to execCommand on any
+    // failure (NotAllowedError when the document is not focused, no HTTPS,
+    // permissions denied, etc.). Visual feedback always runs after this
+    // resolves.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(function () {
+        return execCommandCopy(text);
+      });
+    }
+    return execCommandCopy(text);
   }
 
   ready(function () {

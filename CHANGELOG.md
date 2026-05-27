@@ -4,6 +4,25 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.8.4] — 2026-05-27 — Copy button falls back to execCommand on clipboard rejection
+
+End-to-end browser audit found that copy buttons (token, prompt,
+codeblocks) silently no-oped when `navigator.clipboard.writeText()`
+rejected. Causes: page not focused, no HTTPS, permissions denied,
+programmatic dispatch without user-gesture token. The `.then()` chain
+that flips the label to "Copied" never ran on rejection so the user
+got no visual feedback.
+
+Fix: catch the rejection and fall back to the legacy `execCommand`
+textarea trick. Visual feedback always runs. Modern browsers still get
+the modern path on success.
+
+```js
+return navigator.clipboard.writeText(text).catch(function () {
+  return execCommandCopy(text);
+});
+```
+
 ## [2.8.3] — 2026-05-27 — Fix: path cards stayed visually selected together
 
 v2.8.2's path-card selector used both `:has(input:checked)` (live state)
