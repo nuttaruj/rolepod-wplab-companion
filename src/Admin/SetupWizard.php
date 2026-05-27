@@ -103,9 +103,13 @@ final class SetupWizard
         // On Step 0 we don't know the final path total yet (4 vs 5). Render
         // both footer variants and let CSS `:has(input:checked)` show the
         // matching one — same pattern as the stepper above.
+        $landing = 'https://nuttaruj.github.io/rolepod-wplab/';
+        $ghDocs  = 'https://github.com/nuttaruj/rolepod-wplab';
         if ($step === 0) {
-            echo '<div class="rp-footer-hint" data-rp-footer-for="quick">Step 1 of 4 &middot; Need help? <a href="https://github.com/nuttaruj/rolepod-wplab" target="_blank" rel="noopener">Read the docs</a></div>';
-            echo '<div class="rp-footer-hint" data-rp-footer-for="manual">Step 1 of 5 &middot; Need help? <a href="https://github.com/nuttaruj/rolepod-wplab" target="_blank" rel="noopener">Read the docs</a></div>';
+            $tail = ' &middot; <a href="' . esc_url($landing) . '" target="_blank" rel="noopener">What can AI do here?</a>'
+                  . ' &middot; <a href="' . esc_url($ghDocs) . '" target="_blank" rel="noopener">Docs &amp; source</a>';
+            echo '<div class="rp-footer-hint" data-rp-footer-for="quick">Step 1 of 4' . $tail . '</div>';
+            echo '<div class="rp-footer-hint" data-rp-footer-for="manual">Step 1 of 5' . $tail . '</div>';
         } else {
             Shell::footer('Step ' . ($step + 1) . ' of ' . $totalSteps);
         }

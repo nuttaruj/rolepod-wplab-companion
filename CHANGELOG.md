@@ -4,6 +4,16 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.10.4] — 2026-05-27 — Also surface landing link on Setup wizard Step 0
+
+v2.10.3 updated `Shell::footer()` but the Setup wizard Step 0 renders
+its own two-variant footer inline (because path total flips between
+4 and 5 based on radio selection). That inline render still showed
+the old "Read the docs" text.
+
+Fix: inline render now matches `Shell::footer()` output —
+`Step 1 of N · What can AI do here? · Docs & source`.
+
 ## [2.10.3] — 2026-05-27 — Surface the public landing page (plain-English capability breakdown)
 
 Footer hint on every Rolepod admin page now links the public landing
