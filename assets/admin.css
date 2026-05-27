@@ -727,9 +727,12 @@
 .rp-wizard-stepper .rp-stepper { padding: 0; }
 
 /* Step 0 ships BOTH steppers (quick + manual). Show the one matching the
- * currently-checked path radio. Live, no JS. */
-.rp-wizard:has(input[name="path"][value="quick"]:checked) [data-rp-stepper-for="manual"] { display: none; }
-.rp-wizard:has(input[name="path"][value="manual"]:checked) [data-rp-stepper-for="quick"] { display: none; }
+ * currently-checked path radio. Live, no JS. Same pattern for the footer
+ * hint (Step 1 of 4 vs Step 1 of 5). */
+.rp-shell:has(input[name="path"][value="quick"]:checked) [data-rp-stepper-for="manual"],
+.rp-shell:has(input[name="path"][value="quick"]:checked) [data-rp-footer-for="manual"] { display: none; }
+.rp-shell:has(input[name="path"][value="manual"]:checked) [data-rp-stepper-for="quick"],
+.rp-shell:has(input[name="path"][value="manual"]:checked) [data-rp-footer-for="quick"] { display: none; }
 
 .rp-wizard-body {
   background: var(--rp-surface);

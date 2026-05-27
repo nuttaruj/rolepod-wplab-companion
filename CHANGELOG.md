@@ -4,6 +4,17 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.8.6] — 2026-05-27 — Footer hint "Step 1 of N" also updates live with path selection (Step 0)
+
+v2.8.5 made the stepper labels react live to the path radio but the
+bottom footer hint ("Step 1 of 4 · Need help?") still came from the
+URL `?path=` query param, so on Step 0 the footer could read "Step 1
+of 4" while the stepper showed the 5-step Manual variant.
+
+Fix: same pattern as the stepper — render both footer variants on
+Step 0, show the matching one via CSS `:has(input:checked)`. On
+Steps 1+ the URL path is committed and a single footer renders.
+
 ## [2.8.5] — 2026-05-27 — Stepper labels update live with path selection (Step 0)
 
 User reported: on Choose path (Step 0) the stepper labels stayed on
