@@ -73,7 +73,7 @@ final class SetupWizard
                         </button>
                     </form>
                 <?php else: ?>
-                    <?php $prompt = self::buildPrompt($siteurl, $host, $pairToken); ?>
+                    <?php $prompt = self::buildPrompt($siteurl, $pairToken); ?>
 
                     <div class="rp-pair-card" style="margin-bottom:16px;">
                         <div class="rp-pair-token">
@@ -140,65 +140,36 @@ rolepod-wplab doctor</span><button type="button" class="rp-codeblock-copy" data-
     }
 
     /**
-     * Build the ready-to-paste setup prompt. Same content as v2.7 — only the
-     * surrounding UI changed.
+     * Build the ready-to-paste setup prompt.
+     *
+     * v2.8.1: shortened from ~50 lines to ~14. Per-CLI install snippets
+     * removed — the prompt now links to the canonical install docs in
+     * the MCP repo's README so install instructions stay in one source
+     * of truth and the paste body stays small enough to read in one
+     * glance. Single prompt for every CLI.
      */
-    private static function buildPrompt(string $siteurl, string $host, string $pairToken): string
+    private static function buildPrompt(string $siteurl, string $pairToken): string
     {
+        $docs = 'https://github.com/nuttaruj/rolepod-wplab#install';
         $lines = [];
         $lines[] = '=== rolepod-wplab one-click pair ===';
         $lines[] = '';
-        $lines[] = 'I want you to connect to my WordPress site and run rolepod-wplab tools on it.';
+        $lines[] = 'Connect this WordPress site to your AI CLI.';
         $lines[] = '';
-        $lines[] = "Site URL: {$siteurl}";
-        $lines[] = "Hostname: {$host}";
-        $lines[] = "Pair token (single-use, expires in 60 min): {$pairToken}";
+        $lines[] = "  Site URL:   {$siteurl}";
+        $lines[] = "  Pair token: {$pairToken}    (single-use, expires in 60 min)";
         $lines[] = '';
-        $lines[] = '--- Step 1: install rolepod-wplab on your CLI (pick the one you use) ---';
+        $lines[] = 'Step 1 — Install rolepod-wplab on your CLI per the README:';
+        $lines[] = "  {$docs}";
         $lines[] = '';
-        $lines[] = '* Claude Code (marketplace, recommended):';
-        $lines[] = '    /plugin marketplace add nuttaruj/rolepod-wplab';
-        $lines[] = '    /plugin install rolepod-wplab@rolepod-wplab';
+        $lines[] = 'Step 2 — Once installed, call:';
+        $lines[] = '  rolepod_wp_pair {';
+        $lines[] = "    \"siteurl\": \"{$siteurl}\",";
+        $lines[] = "    \"pair_token\": \"{$pairToken}\"";
+        $lines[] = '  }';
         $lines[] = '';
-        $lines[] = '* Codex CLI (marketplace):';
-        $lines[] = '    codex plugin install github:nuttaruj/rolepod-wplab';
-        $lines[] = '';
-        $lines[] = '* Cursor (manual MCP entry):';
-        $lines[] = '    Settings → MCP → Add server →';
-        $lines[] = '    { "command": "npx", "args": ["-y", "@rolepod/wplab", "serve"] }';
-        $lines[] = '';
-        $lines[] = '* Gemini CLI (manual MCP entry):';
-        $lines[] = '    Add to ~/.gemini/settings.json under mcpServers:';
-        $lines[] = '      "rolepod-wplab": {';
-        $lines[] = '        "command": "npx",';
-        $lines[] = '        "args": ["-y", "@rolepod/wplab", "serve"]';
-        $lines[] = '      }';
-        $lines[] = '';
-        $lines[] = '* Fallback (any CLI — global install):';
-        $lines[] = '    npm install -g @rolepod/wplab';
-        $lines[] = '    then register `rolepod-wplab serve` as a stdio MCP server in your CLI config.';
-        $lines[] = '';
-        $lines[] = '--- Step 2: pair this site using the token above ---';
-        $lines[] = '';
-        $lines[] = 'Once the MCP is available, call:';
-        $lines[] = '';
-        $lines[] = '    rolepod_wp_pair {';
-        $lines[] = "      \"siteurl\": \"{$siteurl}\",";
-        $lines[] = "      \"pair_token\": \"{$pairToken}\"";
-        $lines[] = '    }';
-        $lines[] = '';
-        $lines[] = 'The pair tool will:';
-        $lines[] = '  - exchange the token for a real WP Application Password (companion-minted)';
-        $lines[] = '  - store the credential in the local vault (OS keychain when available)';
-        $lines[] = '  - open a Target and return target_id + capability list';
-        $lines[] = '';
-        $lines[] = '--- Step 3: confirm + start working ---';
-        $lines[] = '';
-        $lines[] = 'After pair returns ok, run:';
-        $lines[] = '';
-        $lines[] = '    rolepod_wp_health_check { "target_id": "<from-step-2>" }';
-        $lines[] = '';
-        $lines[] = 'You should see db_ok:true, rest_ok:true, companion_ok:true.';
+        $lines[] = 'Step 3 — Verify:';
+        $lines[] = '  rolepod_wp_health_check { "target_id": "<from-step-2>" }';
         $lines[] = '';
         $lines[] = '=== end ===';
         return implode("\n", $lines);

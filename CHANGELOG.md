@@ -4,6 +4,31 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.8.1] — 2026-05-27 — Shorter Quick Start prompt (link to README install docs)
+
+The Setup page's "Generate pair token" output used to bake per-CLI install
+snippets (Claude Code / Codex / Cursor / Gemini / npm fallback) directly
+into the paste body — ~50 lines total. Two problems:
+
+1. Long prompts get truncated visually in chat UIs and lose impact.
+2. Install instructions drifted between three places (this prompt, the
+   README, the wplab marketplace listing). Keeping them in sync was
+   manual.
+
+v2.8.1 collapses the prompt to ~14 lines and points the AI at the
+README's `## Install` section for CLI-specific install steps. Single
+prompt now works for every CLI. README stays the single source of
+truth for install instructions.
+
+### Changed
+
+- `Admin\SetupWizard::buildPrompt()` — signature `(siteurl, host,
+  pairToken)` → `(siteurl, pairToken)` (host parameter unused after
+  the trim).
+- Output goes from ~50 lines to ~14, references
+  `https://github.com/nuttaruj/rolepod-wplab#install` for installer
+  details.
+
 ## [2.8.0] — 2026-05-27 — Single top-level "Rolepod WP" admin menu (UX consolidation)
 
 ### Restructured
