@@ -22,7 +22,7 @@ if (defined('ROLEPOD_WP_GUARDIAN_VERSION')) {
     // Another copy already loaded — don't double-register.
     return;
 }
-define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.5');
+define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.6');
 define('ROLEPOD_WP_GUARDIAN_NAMESPACE', 'wplab-recovery/v1');
 define('ROLEPOD_WP_GUARDIAN_FATALS_TRANSIENT', 'rolepod_wp_recovery_recent_fatals');
 define('ROLEPOD_WP_GUARDIAN_SAFE_MODE_OPTION', 'rolepod_wp_safe_mode');
@@ -515,6 +515,24 @@ function rolepod_guardian_extract_route(string $uri): ?string
 function rolepod_guardian_authenticate(): ?\WP_User
 {
     [$user, $pass] = rolepod_guardian_extract_basic_auth();
+
+    // Temporary debug instrumentation (v2.6.6). Remove in v2.7+.
+    if (defined('WP_CONTENT_DIR')) {
+        $log = WP_CONTENT_DIR . '/uploads/rolepod-guardian-debug.log';
+        $line = sprintf(
+            "[%s] auth_probe user=%s pass_len=%d PHP_AUTH_USER=%s PHP_AUTH_PW_set=%d HTTP_AUTH_set=%d REDIRECT_HTTP_AUTH_set=%d uri=%s\n",
+            gmdate('c'),
+            $user !== '' ? $user : '(empty)',
+            strlen($pass),
+            isset($_SERVER['PHP_AUTH_USER']) ? (string) $_SERVER['PHP_AUTH_USER'] : '(missing)',
+            isset($_SERVER['PHP_AUTH_PW']) ? 1 : 0,
+            isset($_SERVER['HTTP_AUTHORIZATION']) ? 1 : 0,
+            isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION']) ? 1 : 0,
+            isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '(missing)'
+        );
+        @file_put_contents($log, $line, FILE_APPEND);
+    }
+
     if ($user === '' || $pass === '') {
         return null;
     }
