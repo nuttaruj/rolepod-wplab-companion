@@ -811,8 +811,7 @@
   pointer-events: none;
 }
 
-.rp-path-card:has(input:checked),
-.rp-path-card.is-checked {
+.rp-path-card:has(input:checked) {
   border-color: var(--rp-accent);
   background: var(--rp-accent-soft);
   box-shadow: 0 0 0 4px var(--rp-accent-ring);
@@ -840,8 +839,7 @@
   margin-bottom: 12px;
 }
 
-.rp-path-card:has(input:checked) .rp-path-card-icon,
-.rp-path-card.is-checked .rp-path-card-icon {
+.rp-path-card:has(input:checked) .rp-path-card-icon {
   background: #fff;
   color: var(--rp-accent);
 }

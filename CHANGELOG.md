@@ -4,6 +4,22 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.8.3] — 2026-05-27 — Fix: path cards stayed visually selected together
+
+v2.8.2's path-card selector used both `:has(input:checked)` (live state)
+AND a server-rendered `is-checked` class fallback. When the user clicked
+the other card the radio toggled correctly but the stale `is-checked`
+class never got cleared by JS, so both cards rendered with the accent
+border + ring at the same time.
+
+Fix: drop the `is-checked` class entirely and rely on the native
+`:has(input:checked)` selector. CSS-only, no JS sync needed.
+
+`:has()` browser support is ~95% (Chrome 105+, Safari 15.4+, Firefox
+121+, all current evergreen browsers). For older browsers the cards
+still render but the selected state appears only via the native radio
+button — acceptable degradation.
+
 ## [2.8.2] — 2026-05-27 — Setup page rebuilt as multi-step wizard matching mockup
 
 v2.8.0 collapsed admin to one menu but the Setup page kept both Quick

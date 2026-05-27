@@ -125,7 +125,7 @@ final class SetupWizard
             <?php wp_nonce_field(self::NONCE_ACTION, '_rp_setup_nonce'); ?>
             <input type="hidden" name="rp_action" value="choose_path">
             <div class="rp-path-grid">
-                <label class="rp-path-card <?php echo $currentPath === 'quick' ? 'is-checked' : ''; ?>">
+                <label class="rp-path-card">
                     <input type="radio" name="path" value="quick" <?php checked($currentPath, 'quick'); ?>>
                     <span class="rp-path-card-badge">Recommended</span>
                     <div class="rp-path-card-icon"><?php echo self::iconBolt(19); ?></div>
@@ -136,7 +136,7 @@ final class SetupWizard
                         <span class="rp-chip">3 steps</span>
                     </div>
                 </label>
-                <label class="rp-path-card <?php echo $currentPath === 'manual' ? 'is-checked' : ''; ?>">
+                <label class="rp-path-card">
                     <input type="radio" name="path" value="manual" <?php checked($currentPath, 'manual'); ?>>
                     <div class="rp-path-card-icon"><?php echo self::iconKey(19); ?></div>
                     <div class="rp-path-card-title">Manual setup</div>
