@@ -22,7 +22,7 @@ if (defined('ROLEPOD_WP_GUARDIAN_VERSION')) {
     // Another copy already loaded — don't double-register.
     return;
 }
-define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.9');
+define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.10');
 define('ROLEPOD_WP_GUARDIAN_NAMESPACE', 'wplab-recovery/v1');
 define('ROLEPOD_WP_GUARDIAN_FATALS_TRANSIENT', 'rolepod_wp_recovery_recent_fatals');
 define('ROLEPOD_WP_GUARDIAN_SAFE_MODE_OPTION', 'rolepod_wp_safe_mode');

@@ -12,7 +12,7 @@
 
 **WP plugin that pairs with [`@rolepod/wplab`](https://github.com/nuttaruj/rolepod-wplab) to unlock `execute-php`, runtime introspection, and the one-click "⚡ Generate setup prompt" wizard — so AI agents can pair this site with any CLI in 30 seconds instead of walking the user through App Password creation.**
 
-Without this plugin, `@rolepod/wplab` is a complete default-safe wp-cli + REST + scoped-fs toolkit. With this plugin, the toolkit reaches the same capability ceiling as a third-party plugin — under stricter, opt-in guardrails. MIT, ~500 LOC PHP, no outbound network calls, no telemetry.
+Without this plugin, `@rolepod/wplab` is a complete default-safe wp-cli + REST + scoped-fs toolkit. With this plugin, the toolkit unlocks full runtime control (eval PHP, introspect hooks, browse transients, snapshot + restore themes) — all under opt-in guardrails. MIT, no outbound network calls, no telemetry.
 
 ## What it adds
 
@@ -123,4 +123,4 @@ The zip excludes `.git`, `tests/`, `scripts/`, `README.md`, `CHANGELOG.md` — o
 
 ## License
 
-MIT — see [LICENSE](./LICENSE). Clean-room from [a third-party plugin](https://github.com/use-third-party/third-party) (AGPL-3.0); no a third-party plugin code was read or copied. Same clean-room policy as `rolepod-wplab` itself.
+MIT — see [LICENSE](./LICENSE). Independent implementation, written from spec; not derived from any GPL/AGPL WordPress AI plugin.

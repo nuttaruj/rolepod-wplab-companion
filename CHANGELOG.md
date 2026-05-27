@@ -82,6 +82,17 @@ happens. WP's own WSOD-protection (5.2+ Recovery Mode) uses the same
 trick — we extend it with a REST recovery channel instead of email-based
 recovery links.
 
+## [2.6.10] — 2026-05-27 — Branding cleanup (remove third-party references)
+
+Doc-only patch. Removed references to the third-party WordPress AI plugin
+that originally inspired design exploration. README + CHANGELOG entries
+rephrased to describe features independently rather than by parity. Version
+bump propagates the guardian self-upgrade flow so the new wording lands on
+demos / installs via the standard `plugins_loaded:5` hook.
+
+No behavior change. No schema change. All 8 guardian REST endpoints + all
+main companion endpoints unchanged.
+
 ## [2.6.9] — 2026-05-27 — Improved /status semantics + dispatch_path field
 
 Fix consequence of v2.6.8 design: `main_alive` in `/status` was being
@@ -483,7 +494,8 @@ Mints a 5-min single-use transient + returns a `<siteurl>/?rolepod_wp_otl=<hex>`
 URL. WP `init` hook intercepts the param, single-use deletes the transient,
 calls `wp_set_auth_cookie()` for the issuing admin, and redirects to a
 configurable destination (default: dashboard). Closes the "AI needs admin
-UI without exposing password" gap that a third-party plugin's v1.3 admin links opened.
+UI without exposing password" gap so browser-automation flows don't have
+to surface plaintext credentials.
 
 ### Added — `POST /wplab/v1/fs-rename`
 
@@ -513,7 +525,7 @@ exists (no accidental overwrite). Used by the MCP-side `wp_file_disable` /
   - `wp_metabox_{read,write}` adapter pair.
   - `wp_pods_{read,write}` adapter pair.
   - `wp_conventions_{get,set}` — structured per-site project style guide
-    storage (free equivalent of a third-party plugin Pro's paywalled feature).
+    storage at `~/.config/rolepod-wplab/memory/<host>/conventions.json`.
   - `wp_post_create` now reports `block_count` from Gutenberg comment-syntax
     scan (informational only).
 
