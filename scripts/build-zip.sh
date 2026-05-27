@@ -40,11 +40,14 @@ cp rolepod-wp.php "$STAGE_DIR/"
 cp uninstall.php "$STAGE_DIR/"
 cp LICENSE "$STAGE_DIR/"
 cp -R src "$STAGE_DIR/"
+cp -R guardian "$STAGE_DIR/"
 
-# Sanity check: must contain the main bootstrap + Pair endpoint.
+# Sanity check: must contain the main bootstrap + Pair endpoint + guardian.
 test -f "$STAGE_DIR/rolepod-wp.php" || { echo "missing bootstrap"; exit 1; }
 test -f "$STAGE_DIR/src/Endpoint/Pair.php" || { echo "missing Pair.php"; exit 1; }
 test -f "$STAGE_DIR/src/Security/PairToken.php" || { echo "missing PairToken.php"; exit 1; }
+test -f "$STAGE_DIR/guardian/rolepod-wp-guardian.php" || { echo "missing guardian"; exit 1; }
+test -f "$STAGE_DIR/src/Guardian.php" || { echo "missing Guardian controller"; exit 1; }
 
 (cd "$DIST_DIR" && zip -rq "$(basename "$ZIP_PATH")" "$PLUGIN_DIR")
 SIZE=$(wc -c < "$ZIP_PATH" | tr -d ' ')

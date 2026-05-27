@@ -5,6 +5,7 @@ namespace Rolepod\Wp\Admin;
 
 use Rolepod\Wp\Audit\Log;
 use Rolepod\Wp\Config;
+use Rolepod\Wp\Guardian;
 
 /**
  * Settings → Rolepod for WordPress (single admin page).
@@ -44,6 +45,16 @@ final class SettingsPage
             )
         ) {
             self::handleSave();
+        }
+
+        if (
+            isset($_POST['rolepod_wp_guardian_nonce'])
+            && wp_verify_nonce(
+                sanitize_text_field((string) wp_unslash($_POST['rolepod_wp_guardian_nonce'])),
+                self::NONCE_ACTION . '_guardian'
+            )
+        ) {
+            self::handleGuardianAction();
         }
 
         $config = Config::all();
@@ -88,6 +99,76 @@ final class SettingsPage
 
             <hr>
 
+            <h2>Recovery guardian (mu-plugin)</h2>
+            <?php
+                $guardianInstalled = Guardian::isInstalled();
+                $guardianPath = Guardian::destinationPath();
+                $safeMode = (bool) get_option('rolepod_wp_safe_mode', false);
+                $recentFatals = get_transient('rolepod_wp_recovery_recent_fatals');
+                if (!is_array($recentFatals)) {
+                    $recentFatals = [];
+                }
+            ?>
+            <p>
+                Status:
+                <?php if ($guardianInstalled): ?>
+                    <strong style="color:#2271b1;">✔ Installed</strong> at <code><?php echo esc_html($guardianPath); ?></code>
+                <?php else: ?>
+                    <strong style="color:#b32d2e;">✘ Not installed</strong>
+                <?php endif; ?>
+            </p>
+            <p class="description">The guardian is a tiny mu-plugin that loads <em>before</em> regular plugins. If the main rolepod-wp plugin (or any other plugin/theme) crashes with a parse error or fatal, the guardian's REST endpoints under <code>/wp-json/wplab-recovery/v1/*</code> stay reachable so the MCP can disable the offending file or restore a theme snapshot — without you needing SSH or FTP.</p>
+
+            <form method="post" style="margin-top:8px;">
+                <?php wp_nonce_field(self::NONCE_ACTION . '_guardian', 'rolepod_wp_guardian_nonce'); ?>
+                <?php if ($guardianInstalled): ?>
+                    <button type="submit" name="guardian_action" value="reinstall" class="button">Reinstall guardian</button>
+                    <button type="submit" name="guardian_action" value="remove" class="button button-secondary" onclick="return confirm('Remove the recovery guardian? You lose crash-recovery REST endpoints until you reinstall.');">Remove guardian</button>
+                <?php else: ?>
+                    <button type="submit" name="guardian_action" value="install" class="button button-primary">Install guardian</button>
+                <?php endif; ?>
+            </form>
+
+            <?php if ($safeMode): ?>
+                <p style="margin-top:8px;"><strong style="color:#b32d2e;">⚠ Safe mode is ON.</strong> The MCP refuses risky ops (execute-php, theme switch, file write to functions.php / wp-config) until you clear it.</p>
+                <form method="post" style="margin-top:4px;">
+                    <?php wp_nonce_field(self::NONCE_ACTION . '_guardian', 'rolepod_wp_guardian_nonce'); ?>
+                    <button type="submit" name="guardian_action" value="clear_safe_mode" class="button">Clear safe mode</button>
+                </form>
+            <?php endif; ?>
+
+            <?php if (!empty($recentFatals)): ?>
+                <h3 style="margin-top:16px;">Recent fatals (caught by guardian)</h3>
+                <table class="widefat striped">
+                    <thead>
+                        <tr>
+                            <th>Time (UTC)</th>
+                            <th>Type</th>
+                            <th>File:Line</th>
+                            <th>Message</th>
+                            <th>URI</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach (array_reverse($recentFatals) as $fatal): ?>
+                            <tr>
+                                <td><?php echo esc_html(gmdate('Y-m-d H:i:s', (int) ($fatal['ts'] ?? 0))); ?></td>
+                                <td><code><?php echo esc_html(self::errorTypeName((int) ($fatal['type'] ?? 0))); ?></code></td>
+                                <td><code><?php echo esc_html((string) ($fatal['file'] ?? '')); ?>:<?php echo (int) ($fatal['line'] ?? 0); ?></code></td>
+                                <td><?php echo esc_html((string) ($fatal['message'] ?? '')); ?></td>
+                                <td><code><?php echo esc_html((string) ($fatal['request_uri'] ?? '')); ?></code></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <form method="post" style="margin-top:8px;">
+                    <?php wp_nonce_field(self::NONCE_ACTION . '_guardian', 'rolepod_wp_guardian_nonce'); ?>
+                    <button type="submit" name="guardian_action" value="clear_fatals" class="button">Clear fatal log</button>
+                </form>
+            <?php endif; ?>
+
+            <hr>
+
             <h2>Audit log (last 50 entries)</h2>
             <?php $tail = Log::tail(50); ?>
             <?php if (count($tail) === 0): ?>
@@ -121,6 +202,53 @@ final class SettingsPage
             <?php endif; ?>
         </div>
         <?php
+    }
+
+    private static function handleGuardianAction(): void
+    {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+        $action = isset($_POST['guardian_action'])
+            ? sanitize_text_field((string) wp_unslash($_POST['guardian_action']))
+            : '';
+
+        switch ($action) {
+            case 'install':
+            case 'reinstall':
+                $result = Guardian::install();
+                if ($result['ok']) {
+                    echo '<div class="notice notice-success is-dismissible"><p>Guardian installed at <code>' . esc_html((string) $result['path']) . '</code>.</p></div>';
+                } else {
+                    echo '<div class="notice notice-error"><p>Guardian install failed: <code>' . esc_html((string) ($result['error'] ?? 'UNKNOWN')) . '</code> at <code>' . esc_html((string) $result['path']) . '</code>.</p></div>';
+                }
+                break;
+            case 'remove':
+                Guardian::remove();
+                echo '<div class="notice notice-warning is-dismissible"><p>Guardian removed. Reinstall to restore crash-recovery endpoints.</p></div>';
+                break;
+            case 'clear_fatals':
+                delete_transient('rolepod_wp_recovery_recent_fatals');
+                echo '<div class="notice notice-success is-dismissible"><p>Recent fatal log cleared.</p></div>';
+                break;
+            case 'clear_safe_mode':
+                update_option('rolepod_wp_safe_mode', false, false);
+                echo '<div class="notice notice-success is-dismissible"><p>Safe mode cleared.</p></div>';
+                break;
+        }
+    }
+
+    private static function errorTypeName(int $type): string
+    {
+        $map = [
+            E_ERROR => 'E_ERROR',
+            E_PARSE => 'E_PARSE',
+            E_CORE_ERROR => 'E_CORE_ERROR',
+            E_COMPILE_ERROR => 'E_COMPILE_ERROR',
+            E_USER_ERROR => 'E_USER_ERROR',
+            E_RECOVERABLE_ERROR => 'E_RECOVERABLE_ERROR',
+        ];
+        return $map[$type] ?? ('E_' . $type);
     }
 
     private static function handleSave(): void

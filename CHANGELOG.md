@@ -4,6 +4,105 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.6.0] — 2026-05-27 — Recovery guardian mu-plugin
+
+WordPress core's WSOD-protection ships with `set_recovery_mode_email`, an
+out-of-band recovery channel. v2.6 layers an analogous mechanism for AI-issued
+writes: a tiny self-contained mu-plugin that loads BEFORE regular plugins so
+it survives parse errors / fatals in the main rolepod-wp plugin (or in any
+theme / 3rd-party plugin that loads after it).
+
+### Added — `guardian/rolepod-wp-guardian.php`
+
+Self-contained mu-plugin (no autoload dep on the main plugin's classes).
+Auto-installed into `wp-content/mu-plugins/` on main-plugin activate; removed
+on deactivate (Option A tight coupling — "deactivate = off completely").
+
+Registers:
+
+- `register_shutdown_function` — catches FATAL/PARSE/COMPILE errors and
+  records `{file, line, message, type, ts, request_uri}` into the
+  `rolepod_wp_recovery_recent_fatals` transient (last 10, 24h TTL).
+- `GET /wp-json/wplab-recovery/v1/status` — main_alive (via
+  `defined('ROLEPOD_WP_VERSION')`), recent_fatals, last_fatal, safe_mode,
+  wp_version, php_version, siteurl.
+- `POST /wp-json/wplab-recovery/v1/disable-plugin` — rename plugin main file
+  to `<file>.disabled`, also calls `deactivate_plugins()` for active_plugins
+  cleanup.
+- `POST /wp-json/wplab-recovery/v1/disable-file` — scope-checked rename of
+  any file under wp-content/{plugins,themes,uploads,mu-plugins} or
+  wp-config.php.
+- `POST /wp-json/wplab-recovery/v1/restore-file` — reverse.
+- `POST /wp-json/wplab-recovery/v1/restore-snapshot` — untar a previously
+  captured theme snapshot via PharData.
+- `GET /wp-json/wplab-recovery/v1/list-changes` — direct DB read of the
+  ledger table (bypasses main companion).
+- `POST /wp-json/wplab-recovery/v1/safe-mode` — toggle
+  `rolepod_wp_safe_mode` option flag.
+- `POST /wp-json/wplab-recovery/v1/clear-fatals` — clear recent-fatals
+  transient post-review.
+
+Auth = `current_user_can('manage_options')` via WP-native Application
+Password (no session token — main plugin's `/handshake` may be unreachable).
+
+### Added — `Rolepod\Wp\Guardian` lifecycle controller (`src/Guardian.php`)
+
+- `Guardian::install()` — copy `guardian/rolepod-wp-guardian.php` into
+  `WPMU_PLUGIN_DIR/` (auto-creates dir if missing, chmod 0644).
+- `Guardian::remove()` — silent unlink.
+- `Guardian::isInstalled()` / `destinationPath()` / `sourcePath()`.
+
+Wired into main plugin:
+
+- `register_activation_hook` → `Guardian::install()` (alongside ledger DB).
+- `register_deactivation_hook` → `Guardian::remove()`.
+- `plugins_loaded` priority 5 → re-install if missing (covers WP plugin
+  UPDATE which replaces files without reactivating; users on 2.5 → 2.6 get
+  the guardian on next request without manual reactivation).
+- `uninstall.php` → `Guardian::remove()` + clear recovery transients +
+  delete `rolepod_wp_safe_mode` option.
+
+### Added — Settings page section "Recovery guardian (mu-plugin)"
+
+- Shows install status + absolute path.
+- [Install] / [Reinstall] / [Remove] buttons (nonce-protected).
+- Safe-mode banner when `rolepod_wp_safe_mode` is ON; [Clear safe mode]
+  button.
+- Recent-fatals table (Time, Type, File:Line, Message, URI) + [Clear
+  fatal log] button. Only shows when guardian transient has entries.
+
+### Why mu-plugin (not main plugin) for recovery
+
+WP loads `wp-content/mu-plugins/*.php` BEFORE `wp-content/plugins/*`. If the
+main plugin file has a parse error, PHP throws at parse time and the file
+never runs — its `register_shutdown_function` would never fire. The
+mu-plugin parses + registers its shutdown handler BEFORE PHP attempts the
+main plugin parse, so the handler is in memory by the time the fatal
+happens. WP's own WSOD-protection (5.2+ Recovery Mode) uses the same
+trick — we extend it with a REST recovery channel instead of email-based
+recovery links.
+
+### Doesn't cover
+
+- DB connection failure (mu-plugins load after DB connect).
+- wp-config.php parse error (boot dies before mu-plugins).
+- WP core file missing (no boot at all).
+
+For these, fall back to SSH/FTP/cPanel manual recovery (no plugin-level
+solution exists). Real-world failure distribution: ~95% of WSODs come from
+theme/plugin code at runtime, which the guardian covers.
+
+### Pairs with
+
+`@rolepod/wplab` v1.9.0 — adds:
+
+- `Bridge.recoveryStatus / recoveryDisablePlugin / recoveryDisableFile /
+  recoveryRestoreFile / recoveryRestoreSnapshot / recoveryListChanges /
+  recoverySafeMode` — Bridge wrappers for `/wplab-recovery/v1/*`.
+- `RecoveryModeError` — thrown by the MCP error layer when main namespace
+  returns 5xx and guardian reports `main_alive: false`.
+- 7 new MCP tools (`rolepod_wp_recovery_*`). Tool count 82 → 89.
+
 ## [2.5.0] — 2026-05-27 — One-time admin login + file disable/enable + execute-php crash recovery
 
 ### Added — `POST /wplab/v1/admin/one-time-login`

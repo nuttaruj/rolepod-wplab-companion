@@ -2,10 +2,10 @@
 /**
  * Plugin Name:       Rolepod for WordPress
  * Plugin URI:        https://github.com/nuttaruj/rolepod-wp
- * Description:       The WordPress arm of the Rolepod ecosystem (https://github.com/nuttaruj/rolepod). Exposes guarded REST endpoints so AI coding agents (Claude Code / Cursor / Codex / Gemini) — driven by the rolepod-wplab MCP server — can run runtime introspection, the one-click pair wizard, and (with explicit opt-in) execute-php on this WordPress install. Endpoints are OFF by default; enable per-feature in Settings → Rolepod for WordPress.
+ * Description:       The WordPress arm of the Rolepod ecosystem (https://github.com/nuttaruj/rolepod). Exposes guarded REST endpoints so AI coding agents (Claude Code / Cursor / Codex / Gemini) — driven by the rolepod-wplab MCP server — can run runtime introspection, the one-click pair wizard, and (with explicit opt-in) execute-php on this WordPress install. Endpoints are OFF by default; enable per-feature in Settings → Rolepod for WordPress. v2.6 adds a mu-plugin recovery guardian that survives main-plugin parse/fatal errors.
  * Author:            nuttaruj
  * Author URI:        https://github.com/nuttaruj
- * Version:           2.5.0
+ * Version:           2.6.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * License:           MIT
@@ -21,7 +21,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ROLEPOD_WP_VERSION', '2.5.0');
+define('ROLEPOD_WP_VERSION', '2.6.0');
 define('ROLEPOD_WP_FILE', __FILE__);
 define('ROLEPOD_WP_DIR', plugin_dir_path(__FILE__));
 
@@ -81,10 +81,16 @@ add_action('admin_menu', static function (): void {
 // only fires on fresh activate; WP plugin UPDATE replaces files without
 // re-activating. This hook fires on every request once and is a no-op when
 // the schema is already at the current version.
+//
+// v2.6 — also re-installs the mu-plugin guardian on upgrade so users moving
+// from 2.5 → 2.6 get the recovery layer without manual reactivation.
 add_action('plugins_loaded', static function (): void {
     $current = (string) get_option(\Rolepod\Wp\Audit\ChangeLedger::TABLE_VERSION_OPTION, '');
     if ($current !== \Rolepod\Wp\Audit\ChangeLedger::TABLE_VERSION) {
         \Rolepod\Wp\Audit\ChangeLedger::install();
+    }
+    if (!\Rolepod\Wp\Guardian::isInstalled()) {
+        \Rolepod\Wp\Guardian::install();
     }
 }, 5);
 
@@ -100,10 +106,12 @@ register_activation_hook(__FILE__, static function (): void {
     ]);
     // v2.3 — create the change-ledger table for AI-issued writes. Idempotent.
     \Rolepod\Wp\Audit\ChangeLedger::install();
+    // v2.6 — install mu-plugin guardian for crash recovery.
+    \Rolepod\Wp\Guardian::install();
 });
 
 register_deactivation_hook(__FILE__, static function (): void {
-    // Plugin deactivated — endpoints unregister automatically since they're
-    // bound on rest_api_init only when plugin is active. No state to clean
-    // up here; uninstall.php handles option deletion.
+    // v2.6 — Option A tight coupling: deactivate = guardian also removed.
+    // Predictable "off completely" UX. Re-activate copies it back.
+    \Rolepod\Wp\Guardian::remove();
 });
