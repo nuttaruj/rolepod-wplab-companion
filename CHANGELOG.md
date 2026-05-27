@@ -82,6 +82,50 @@ happens. WP's own WSOD-protection (5.2+ Recovery Mode) uses the same
 trick — we extend it with a REST recovery channel instead of email-based
 recovery links.
 
+## [2.6.4] — 2026-05-27 — Pre-load pluggable.php BEFORE get_user_by()
+
+Critical fix found during demo test of v2.6.3. Recovery endpoint requests
+caused a fatal:
+
+```
+PHP Fatal error: Uncaught Error: Call to undefined function get_user_by()
+in mu-plugins/rolepod-wp-guardian.php:524
+```
+
+Root cause: v2.6.3's `authenticate()` called `get_user_by()` BEFORE
+requiring pluggable.php. The require was conditional on
+`!function_exists('wp_check_password')`, which fired AFTER the
+`get_user_by()` call. Since pluggable.php loads AFTER plugins in
+wp-settings.php (NOT before mu-plugins), `get_user_by()` was undefined at
+`muplugins_loaded`. v2.6.2 had the same bug — passed the v2.6.0 → v2.6.2
+upgrade test only because the OLD v2.6.0 guardian (no early dispatch) was
+still in memory in cached workers.
+
+Fix: require `pluggable.php` at the TOP of `authenticate()`, before any
+call to `get_user_by` / `wp_check_password` / `wp_set_current_user`.
+Comment now explicitly enumerates which functions come from pluggable so
+future contributors don't repeat the mistake.
+
+Verified via Hostinger error log:
+- Before: 100% WSOD on /wplab-recovery/v1/* with fresh workers.
+- After: 200 with valid auth, 401 without.
+
+### Architectural lesson recorded
+
+WordPress boot order at `muplugins_loaded`:
+- ✅ Loaded: `wp-load.php`, `wp-includes/load.php`, `wp-includes/functions.php`,
+  `wp-includes/formatting.php`, `class-wp-rest-server.php`, REST API,
+  `class-wp-application-passwords.php` (via autoload if accessed)
+- ❌ NOT loaded: `pluggable.php` (and everything it provides:
+  `get_user_by`, `wp_check_password`, `wp_set_current_user`,
+  `is_user_logged_in`, `wp_get_current_user`, etc.)
+- ❌ NOT loaded: regular plugins (loaded after mu-plugins)
+- ❌ NOT loaded: theme (loaded at `setup_theme`)
+
+For any mu-plugin code that needs pluggable functions: require
+`wp-includes/pluggable.php` explicitly. Don't rely on autoload for
+pluggable — there is no autoload for functions in PHP.
+
 ## [2.6.3] — 2026-05-27 — Guardian self-upgrade on plugin update
 
 Fix: v2.6.2 install on a site already running v2.6.0 left the OLD

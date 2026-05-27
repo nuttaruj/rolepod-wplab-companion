@@ -22,7 +22,7 @@ if (defined('ROLEPOD_WP_GUARDIAN_VERSION')) {
     // Another copy already loaded — don't double-register.
     return;
 }
-define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.3');
+define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.4');
 define('ROLEPOD_WP_GUARDIAN_NAMESPACE', 'wplab-recovery/v1');
 define('ROLEPOD_WP_GUARDIAN_FATALS_TRANSIENT', 'rolepod_wp_recovery_recent_fatals');
 define('ROLEPOD_WP_GUARDIAN_SAFE_MODE_OPTION', 'rolepod_wp_safe_mode');
@@ -519,20 +519,24 @@ function rolepod_guardian_authenticate(): ?\WP_User
         return null;
     }
 
-    // get_user_by lives in wp-includes/user.php which is loaded by
-    // wp-load.php before mu-plugins, so it's always available here.
+    // CRITICAL: at muplugins_loaded, wp-includes/pluggable.php has NOT
+    // yet been required — wp-settings.php loads it AFTER plugins, BEFORE
+    // init. That file provides get_user_by(), wp_check_password(),
+    // wp_set_current_user(), is_user_logged_in(), and current_user_can()
+    // (which is in capabilities.php but indirectly depends on pluggable
+    // for current-user state). v2.6.3 incorrectly assumed get_user_by()
+    // was always available — confirmed FATAL on Hostinger PHP 8.1.
+    //
+    // Require pluggable here, BEFORE any pluggable-dependent call. This
+    // also locks in WP-core's implementations (security plugins can't
+    // override the recovery escape hatch — desired for a recovery path).
+    if (!function_exists('get_user_by') || !function_exists('wp_check_password')) {
+        require_once ABSPATH . WPINC . '/pluggable.php';
+    }
+
     $wp_user = is_email($user) ? get_user_by('email', $user) : get_user_by('login', $user);
     if (!$wp_user) {
         return null;
-    }
-
-    // wp_check_password is pluggable + lives in wp-includes/pluggable.php
-    // which loads AFTER plugins in wp-settings.php, so it's NOT available
-    // at muplugins_loaded by default. Require it explicitly. This locks
-    // in WP-core's wp_check_password (security plugins can't override the
-    // recovery path) — desired for an escape hatch.
-    if (!function_exists('wp_check_password')) {
-        require_once ABSPATH . WPINC . '/pluggable.php';
     }
 
     if (!class_exists('\WP_Application_Passwords')) {
