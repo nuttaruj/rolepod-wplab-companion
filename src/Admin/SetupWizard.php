@@ -55,30 +55,24 @@ final class SetupWizard
             $step = $totalSteps - 1;
         }
 
-        $stepLabels = $path === 'manual'
-            ? ['Choose path', 'App password', 'Install MCP', 'Wire CLI', 'Verify']
-            : ['Choose path', 'Generate token', 'Connect AI CLI', 'Verify'];
+        $quickLabels  = ['Choose path', 'Generate token', 'Connect AI CLI', 'Verify'];
+        $manualLabels = ['Choose path', 'App password', 'Install MCP', 'Wire CLI', 'Verify'];
 
         $subtitle = 'Connect this WordPress site to your AI CLI.';
         Shell::open(Menu::SLUG_SETUP, 'Setup', $subtitle);
 
         echo '<div class="rp-wizard">';
 
-        // Stepper
-        echo '<div class="rp-wizard-stepper"><div class="rp-stepper">';
-        foreach ($stepLabels as $i => $label) {
-            $cls = '';
-            if ($i < $step) $cls = 'is-done';
-            elseif ($i === $step) $cls = 'is-active';
-            echo '<div class="rp-step ' . esc_attr($cls) . '">';
-            echo '  <div class="rp-step-dot">' . ($i < $step ? '&#10003;' : (string) ($i + 1)) . '</div>';
-            echo '  <div class="rp-step-label">' . esc_html($label) . '</div>';
-            echo '</div>';
-            if ($i < count($stepLabels) - 1) {
-                echo '<div class="rp-step-line"></div>';
-            }
+        // Stepper. On Step 0 we render BOTH steppers so CSS `:has(input:checked)`
+        // can swap them live as the user toggles the path radios — no JS needed.
+        // On steps 1+ the path is locked and only the matching stepper renders.
+        if ($step === 0) {
+            self::renderStepper($quickLabels, $step, 'data-rp-stepper-for="quick"');
+            self::renderStepper($manualLabels, $step, 'data-rp-stepper-for="manual"');
+        } else {
+            $labels = $path === 'manual' ? $manualLabels : $quickLabels;
+            self::renderStepper($labels, $step);
         }
-        echo '</div></div>';
 
         // Body
         echo '<div class="rp-wizard-body">';
@@ -336,7 +330,32 @@ rolepod-wplab doctor</span><button type="button" class="rp-codeblock-copy" data-
         <?php
     }
 
-    // ───────────────────────────── Nav + POST handler ─────────────────────────────
+    // ───────────────────────────── Stepper + Nav + POST handler ─────────────────────────────
+
+    /**
+     * Render a stepper bar. When $attrs contains data-rp-stepper-for, the
+     * caller can render BOTH a quick and manual variant on Step 0 and rely
+     * on CSS `:has(input:checked)` to swap them live as the radio toggles.
+     *
+     * @param string[] $labels
+     */
+    private static function renderStepper(array $labels, int $currentStep, string $attrs = ''): void
+    {
+        echo '<div class="rp-wizard-stepper" ' . $attrs . '><div class="rp-stepper">';
+        foreach ($labels as $i => $label) {
+            $cls = '';
+            if ($i < $currentStep) $cls = 'is-done';
+            elseif ($i === $currentStep) $cls = 'is-active';
+            echo '<div class="rp-step ' . esc_attr($cls) . '">';
+            echo '  <div class="rp-step-dot">' . ($i < $currentStep ? '&#10003;' : (string) ($i + 1)) . '</div>';
+            echo '  <div class="rp-step-label">' . esc_html($label) . '</div>';
+            echo '</div>';
+            if ($i < count($labels) - 1) {
+                echo '<div class="rp-step-line"></div>';
+            }
+        }
+        echo '</div></div>';
+    }
 
     private static function renderNav(int $step, int $totalSteps, string $path): void
     {

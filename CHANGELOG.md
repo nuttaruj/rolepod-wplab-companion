@@ -4,6 +4,31 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.8.5] — 2026-05-27 — Stepper labels update live with path selection (Step 0)
+
+User reported: on Choose path (Step 0) the stepper labels stayed on
+the Quick variant even after clicking the Manual radio. The stepper
+only updated after the form was submitted via Continue. Mockup
+expected the labels to flip live as the radio toggles.
+
+Fix: render BOTH steppers on Step 0 (quick 4-step + manual 5-step)
+and use a CSS `:has(input[name="path"]:checked)` selector to show
+only the one matching the currently-checked radio. No JS, no
+roundtrip — the stepper updates the moment the radio state changes.
+
+On Steps 1+ the path is already locked, so only the matching stepper
+renders (no waste).
+
+```css
+.rp-wizard:has(input[name="path"][value="quick"]:checked)
+  [data-rp-stepper-for="manual"] { display: none; }
+.rp-wizard:has(input[name="path"][value="manual"]:checked)
+  [data-rp-stepper-for="quick"] { display: none; }
+```
+
+Extracted the stepper rendering into `SetupWizard::renderStepper()`
+since it now runs twice on Step 0.
+
 ## [2.8.4] — 2026-05-27 — Copy button falls back to execCommand on clipboard rejection
 
 End-to-end browser audit found that copy buttons (token, prompt,
