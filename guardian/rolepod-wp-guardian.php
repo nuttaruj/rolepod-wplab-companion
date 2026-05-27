@@ -22,7 +22,7 @@ if (defined('ROLEPOD_WP_GUARDIAN_VERSION')) {
     // Another copy already loaded — don't double-register.
     return;
 }
-define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.6');
+define('ROLEPOD_WP_GUARDIAN_VERSION', '2.6.7');
 define('ROLEPOD_WP_GUARDIAN_NAMESPACE', 'wplab-recovery/v1');
 define('ROLEPOD_WP_GUARDIAN_FATALS_TRANSIENT', 'rolepod_wp_recovery_recent_fatals');
 define('ROLEPOD_WP_GUARDIAN_SAFE_MODE_OPTION', 'rolepod_wp_safe_mode');
@@ -515,79 +515,42 @@ function rolepod_guardian_extract_route(string $uri): ?string
 function rolepod_guardian_authenticate(): ?\WP_User
 {
     [$user, $pass] = rolepod_guardian_extract_basic_auth();
-
-    // Temporary debug instrumentation (v2.6.6). Remove in v2.7+.
-    if (defined('WP_CONTENT_DIR')) {
-        $log = WP_CONTENT_DIR . '/uploads/rolepod-guardian-debug.log';
-        $line = sprintf(
-            "[%s] auth_probe user=%s pass_len=%d PHP_AUTH_USER=%s PHP_AUTH_PW_set=%d HTTP_AUTH_set=%d REDIRECT_HTTP_AUTH_set=%d uri=%s\n",
-            gmdate('c'),
-            $user !== '' ? $user : '(empty)',
-            strlen($pass),
-            isset($_SERVER['PHP_AUTH_USER']) ? (string) $_SERVER['PHP_AUTH_USER'] : '(missing)',
-            isset($_SERVER['PHP_AUTH_PW']) ? 1 : 0,
-            isset($_SERVER['HTTP_AUTHORIZATION']) ? 1 : 0,
-            isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION']) ? 1 : 0,
-            isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '(missing)'
-        );
-        @file_put_contents($log, $line, FILE_APPEND);
-    }
-
     if ($user === '' || $pass === '') {
         return null;
     }
 
-    // CRITICAL: at muplugins_loaded, wp-includes/pluggable.php has NOT
-    // yet been required — wp-settings.php loads it AFTER plugins, BEFORE
-    // init. That file provides get_user_by(), wp_check_password(),
-    // wp_set_current_user(), is_user_logged_in(), and current_user_can()
-    // (which is in capabilities.php but indirectly depends on pluggable
-    // for current-user state). v2.6.3 incorrectly assumed get_user_by()
-    // was always available — confirmed FATAL on Hostinger PHP 8.1.
-    //
-    // Require pluggable here, BEFORE any pluggable-dependent call. This
-    // also locks in WP-core's implementations (security plugins can't
-    // override the recovery escape hatch — desired for a recovery path).
+    // At muplugins_loaded, pluggable.php is NOT yet required by WP. It
+    // provides get_user_by(), wp_check_password(), wp_set_current_user()
+    // and friends. Require it explicitly before use.
     if (!function_exists('get_user_by') || !function_exists('wp_check_password')) {
         require_once ABSPATH . WPINC . '/pluggable.php';
     }
 
-    $wp_user = is_email($user) ? get_user_by('email', $user) : get_user_by('login', $user);
-    if (!$wp_user) {
-        return null;
-    }
-
-    if (!class_exists('\WP_Application_Passwords')) {
-        require_once ABSPATH . WPINC . '/class-wp-application-passwords.php';
-    }
-
-    // WP_Application_Passwords::get_user_application_passwords() returns
-    // an array of items: [{uuid, app_id, name, password (hashed), created,
-    // last_used, last_ip}]. We hash-compare each via wp_check_password.
-    // This mirrors wp_authenticate_application_password() in WP core; we
-    // can't call that function directly because it's hooked into the
-    // wp_authenticate filter chain which isn't active at muplugins_loaded.
-    // (Earlier v2.6.4 tried ::validate_application_password() but that
-    // method doesn't exist in WP core — confirmed on Hostinger PHP 8.1.)
-    $passwords = \WP_Application_Passwords::get_user_application_passwords($wp_user->ID);
-    if (is_array($passwords)) {
-        foreach ($passwords as $item) {
-            if (!isset($item['password'])) {
-                continue;
-            }
-            if (wp_check_password($pass, (string) $item['password'], $wp_user->ID)) {
-                // Best-effort record usage (non-fatal if fails).
-                if (isset($item['uuid']) && method_exists('\WP_Application_Passwords', 'record_application_password_usage')) {
-                    @\WP_Application_Passwords::record_application_password_usage($wp_user->ID, (string) $item['uuid']);
-                }
-                return $wp_user;
-            }
+    // wp_authenticate_application_password() (wp-includes/user.php) is
+    // the WP-core entry point for Application Password validation. It
+    // handles all the password-normalization quirks (trim, NBSP →
+    // space, strip whitespace) AND understands WP 7.0's new `$generic$`
+    // hash format. v2.6.5 tried to inline the iterate-and-check pattern
+    // but missed the normalization step — passwords were never matched
+    // against hashes because WP 7.0 stores hash of NORMALIZED password
+    // but we passed the raw form. Direct delegation avoids re-implementing
+    // every quirk.
+    //
+    // Signature: wp_authenticate_application_password($input_user, $username, $password)
+    // Returns: WP_User on success, WP_Error on failure, or $input_user
+    // unchanged if AppPasswords path doesn't apply. We pass null so any
+    // non-null return is meaningful.
+    if (function_exists('wp_authenticate_application_password')) {
+        $result = wp_authenticate_application_password(null, $user, $pass);
+        if ($result instanceof \WP_User) {
+            return $result;
         }
     }
 
-    // Last-resort fallback: plain login password (useful for local dev /
-    // CI smoke tests that don't have Application Passwords set up).
-    if (wp_check_password($pass, $wp_user->user_pass, $wp_user->ID)) {
+    // Fallback for local dev / CI smoke tests that authenticate with the
+    // plain login password (no Application Password generated).
+    $wp_user = is_email($user) ? get_user_by('email', $user) : get_user_by('login', $user);
+    if ($wp_user && wp_check_password($pass, $wp_user->user_pass, $wp_user->ID)) {
         return $wp_user;
     }
 
