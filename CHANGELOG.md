@@ -82,6 +82,51 @@ happens. WP's own WSOD-protection (5.2+ Recovery Mode) uses the same
 trick — we extend it with a REST recovery channel instead of email-based
 recovery links.
 
+## [2.7.0] — 2026-05-27 — `/option-set` + `/option-get` endpoints + server-side ledger capture in `/execute-php`
+
+### Added — `POST /wp-json/wplab/v1/option-set` + `POST /option-get`
+
+Direct wp_options access via `update_option()` / `get_option()`. Bypasses
+the WP REST `/wp/v2/settings` allowlist limitation — that endpoint exposes
+only ~10 fields under different names than raw wp_options
+(title vs blogname, description vs blogdescription, timezone vs
+timezone_string), and silently ignores unknown field names.
+
+Safety: refuses to write WP-managed keys (`db_version`, `secret`,
+`recovery_keys`, `auth_*`, `nonce_*`, `secure_auth_*`, `rewrite_rules`).
+Customizable via the `rolepod_wp_option_set_blocklist` filter.
+
+`/option-set` returns `{ ok, name, changed, previous, current, audit_id }`
+so the MCP can record a ledger row with authoritative before/after values
+without an extra read round-trip.
+
+### Added — server-side ledger capture in `/execute-php` (Gap #9)
+
+After a successful eval, the endpoint scans the payload for common write
+fingerprints via regex:
+
+  update_option / wp_insert_post / wp_update_post / wp_delete_post /
+  update_post_meta / activate_plugins / deactivate_plugins / switch_theme /
+  wp_insert_user / wp_create_user / wp_create_nav_menu /
+  wp_update_nav_menu_item / set_theme_mod
+
+For every match, records a Change Ledger row tagged `source_tool=execute_php`
+with `reversible=false` (manual revert required for arbitrary PHP). The
+response includes a `ledger` summary so MCP / AI can correlate the
+execute-php call with the rows it created.
+
+Best-effort: won't catch dynamic dispatch (call_user_func, variable
+function names). Most AI-generated payloads use direct calls so coverage is
+high in practice. Reads or pure introspection don't pollute the ledger.
+
+This is the main answer to the e2e finding that 30+ writes via execute-php
+left zero ledger entries.
+
+### Notes
+
+REST namespace `wplab/v1` unchanged. MIN_COMPANION_VERSION can stay at
+2.1.0 — the new endpoints are additive; older MCP clients ignore them.
+
 ## [2.6.10] — 2026-05-27 — Branding cleanup (remove third-party references)
 
 Doc-only patch. Removed references to the third-party WordPress AI plugin

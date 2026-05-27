@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Rolepod\Wp\Endpoint;
 
+use Rolepod\Wp\Audit\ChangeRecorder;
 use Rolepod\Wp\Audit\Log;
 use Rolepod\Wp\Config;
 use Rolepod\Wp\Security\AstScreen;
@@ -190,6 +191,18 @@ final class ExecutePhp
             'payload' => $payload,
         ]);
 
+        // v2.7 — server-side ledger capture. On success, scan payload for
+        // common write fingerprints (update_option, wp_insert_post,
+        // wp_update_post, update_post_meta, deactivate_plugins, etc.) and
+        // record one ledger row per match so AI writes via execute-php are
+        // discoverable in the AI Change Ledger. The detection is best-effort
+        // tokenize-by-regex; it won't catch obfuscated payloads but covers
+        // the common case where AI writes ARE the read.
+        $ledgerSummary = null;
+        if ($errorMsg === null) {
+            $ledgerSummary = self::recordExecutePhpLedger($payload, $auditId, $returnValue);
+        }
+
         $body = [
             'ok' => $errorMsg === null,
             'return_value' => $returnValue,
@@ -197,11 +210,94 @@ final class ExecutePhp
             'duration_ms' => $durationMs,
             'php_warnings' => $phpWarnings,
             'audit_id' => $auditId,
+            'ledger' => $ledgerSummary,
         ];
         if ($errorMsg !== null) {
             $body['error_message'] = $errorMsg;
         }
 
         return new WP_REST_Response($body, $errorMsg === null ? 200 : 500);
+    }
+
+    /**
+     * Scan a successfully-executed PHP payload for common WP write calls and
+     * record a Change Ledger row per detected write. Best-effort regex-based
+     * — won't catch dynamic dispatch (call_user_func, variable function
+     * names) but covers the bulk of AI-generated payloads where calls are
+     * direct.
+     *
+     * Returns a short summary used in the response so MCP / AI can correlate
+     * the execute-php call with the ledger rows it created.
+     */
+    private static function recordExecutePhpLedger(string $payload, string $auditId, $returnValue): array
+    {
+        $detected = [];
+        $session = isset($_SERVER['HTTP_X_ROLEPOD_SESSION']) ? (string) $_SERVER['HTTP_X_ROLEPOD_SESSION'] : null;
+
+        $patterns = [
+            'option' => '/\\bupdate_option\\s*\\(\\s*[\'\"]([^\'\"]+)[\'\"]/',
+            'post_create' => '/\\bwp_insert_post\\s*\\(/',
+            'post_update' => '/\\bwp_update_post\\s*\\(/',
+            'post_delete' => '/\\bwp_delete_post\\s*\\(/',
+            'post_meta' => '/\\bupdate_post_meta\\s*\\(\\s*[^,]+,\\s*[\'\"]([^\'\"]+)[\'\"]/',
+            'plugin_activate' => '/\\bactivate_plugins?\\s*\\(/',
+            'plugin_deactivate' => '/\\bdeactivate_plugins\\s*\\(/',
+            'theme_switch' => '/\\bswitch_theme\\s*\\(/',
+            'user_create' => '/\\bwp_insert_user\\s*\\(|\\bwp_create_user\\s*\\(/',
+            'menu_create' => '/\\bwp_create_nav_menu\\s*\\(/',
+            'menu_item' => '/\\bwp_update_nav_menu_item\\s*\\(/',
+            'theme_mod' => '/\\bset_theme_mod\\s*\\(\\s*[\'\"]([^\'\"]+)[\'\"]/',
+        ];
+
+        foreach ($patterns as $kind => $regex) {
+            if (preg_match_all($regex, $payload, $matches, PREG_SET_ORDER) > 0) {
+                foreach ($matches as $m) {
+                    $sub = isset($m[1]) ? $m[1] : $kind;
+                    try {
+                        $rowAuditId = ChangeRecorder::record([
+                            'category' => self::ledgerCategory($kind),
+                            'subcategory' => $sub,
+                            'target_descriptor' => "$kind via execute-php (audit:$auditId)",
+                            'before_state' => null,
+                            'after_state' => ['detected_op' => $kind, 'execute_php_audit_id' => $auditId],
+                            'reversible' => false, // can't auto-revert arbitrary execute-php
+                            'source_tool' => 'execute_php',
+                            'source_session' => $session,
+                            'notes' => 'Auto-detected from execute-php payload via regex scan. Manual revert required.',
+                        ]);
+                        $detected[] = ['kind' => $kind, 'subcategory' => $sub, 'audit_id' => $rowAuditId];
+                    } catch (\Throwable $t) {
+                        // Ledger DB might not exist yet on fresh install — swallow.
+                    }
+                }
+            }
+        }
+
+        return [
+            'detected_ops' => count($detected),
+            'rows' => $detected,
+            'note' => count($detected) === 0
+                ? 'No direct write calls detected — payload may be read-only or use dynamic dispatch.'
+                : 'Regex-detected writes recorded in ledger (reversible=false).',
+        ];
+    }
+
+    private static function ledgerCategory(string $kind): string
+    {
+        $map = [
+            'option' => 'option',
+            'post_create' => 'post',
+            'post_update' => 'post',
+            'post_delete' => 'post',
+            'post_meta' => 'post',
+            'plugin_activate' => 'plugin',
+            'plugin_deactivate' => 'plugin',
+            'theme_switch' => 'theme',
+            'user_create' => 'execute_php', // no user category yet
+            'menu_create' => 'execute_php',
+            'menu_item' => 'execute_php',
+            'theme_mod' => 'theme',
+        ];
+        return $map[$kind] ?? 'execute_php';
     }
 }
