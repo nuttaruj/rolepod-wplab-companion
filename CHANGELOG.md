@@ -4,6 +4,18 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.8.7] — 2026-05-27 — Audit log timeline scrolls inside a fixed-height container
+
+Settings page rendered all 50 audit entries inline → very tall page,
+buried the right sidebar (guardian + plugin info) below the fold.
+
+Fix: cap `.rp-timeline` at `max-height: 560px` with `overflow-y: auto`
+so the user sees ~10-12 entries by default and scrolls for the rest.
+Added a subtle gradient mask at the bottom edge so it's visually clear
+more content is below.
+
+Data unchanged — still pulls last 50 via `Log::tail(50)`.
+
 ## [2.8.6] — 2026-05-27 — Footer hint "Step 1 of N" also updates live with path selection (Step 0)
 
 v2.8.5 made the stepper labels react live to the path radio but the

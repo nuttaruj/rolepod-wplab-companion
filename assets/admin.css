@@ -566,7 +566,15 @@
 }
 
 /* === Audit timeline === */
-.rp-timeline { padding: 4px 0; }
+.rp-timeline {
+  padding: 4px 0;
+  max-height: 560px;
+  overflow-y: auto;
+  /* Subtle scroll-edge fade so the user sees there's more below. */
+  mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 24px), transparent 100%);
+}
+.rp-timeline-day:first-child { margin-top: 4px; }
 .rp-timeline-day {
   display: flex;
   align-items: center;
