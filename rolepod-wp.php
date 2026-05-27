@@ -5,7 +5,7 @@
  * Description:       The WordPress arm of the Rolepod ecosystem (https://github.com/nuttaruj/rolepod). Exposes guarded REST endpoints so AI coding agents (Claude Code / Cursor / Codex / Gemini) — driven by the rolepod-wplab MCP server — can run runtime introspection, the one-click pair wizard, and (with explicit opt-in) execute-php on this WordPress install. Endpoints are OFF by default; enable per-feature in Settings → Rolepod for WordPress.
  * Author:            nuttaruj
  * Author URI:        https://github.com/nuttaruj
- * Version:           2.4.0
+ * Version:           2.5.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * License:           MIT
@@ -21,7 +21,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ROLEPOD_WP_VERSION', '2.4.0');
+define('ROLEPOD_WP_VERSION', '2.5.0');
 define('ROLEPOD_WP_FILE', __FILE__);
 define('ROLEPOD_WP_DIR', plugin_dir_path(__FILE__));
 
@@ -59,7 +59,16 @@ add_action('rest_api_init', static function (): void {
     // v2.4 — pre-write syntax check + theme snapshot/restore
     \Rolepod\Wp\Endpoint\SyntaxCheck::register();
     \Rolepod\Wp\Endpoint\ThemeSnapshot::register();
+    // v2.5 — one-time admin login + file disable/enable + field-plugin adapters
+    \Rolepod\Wp\Endpoint\OneTimeLogin::register();
+    \Rolepod\Wp\Endpoint\FsRename::register();
 });
+
+// v2.5 — intercept ?rolepod_wp_otl=<token> on any request for the one-time
+// admin login flow. Priority 1 so it runs before WP's main routing.
+add_action('init', static function (): void {
+    \Rolepod\Wp\Endpoint\OneTimeLogin::maybeIntercept();
+}, 1);
 
 add_action('admin_menu', static function (): void {
     \Rolepod\Wp\Admin\SettingsPage::register();

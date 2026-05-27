@@ -4,6 +4,49 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.5.0] — 2026-05-27 — One-time admin login + file disable/enable + execute-php crash recovery
+
+### Added — `POST /wplab/v1/admin/one-time-login`
+
+Mints a 5-min single-use transient + returns a `<siteurl>/?rolepod_wp_otl=<hex>`
+URL. WP `init` hook intercepts the param, single-use deletes the transient,
+calls `wp_set_auth_cookie()` for the issuing admin, and redirects to a
+configurable destination (default: dashboard). Closes the "AI needs admin
+UI without exposing password" gap that a third-party plugin's v1.3 admin links opened.
+
+### Added — `POST /wplab/v1/fs-rename`
+
+Scope-checked rename (src + dest must resolve under `wp-content/{plugins,
+themes,uploads,mu-plugins}` or be `wp-config.php`). Refuses if dest already
+exists (no accidental overwrite). Used by the MCP-side `wp_file_disable` /
+`wp_file_enable` toggle pair.
+
+### Changed — execute-php crash recovery + duration_ms
+
+`ExecutePhp::handle()` now:
+- Catches `\ParseError` separately (returns line number).
+- Catches `\Error` (PHP 7+ fatals like "Class not found") without bringing
+  down the request.
+- Installs a temporary error handler that captures E_WARNING / E_NOTICE /
+  E_USER_WARNING into `php_warnings` array instead of failing eval.
+- Restores the prior error-handler chain post-eval.
+- Measures `duration_ms` via microtime; previously stubbed at 0.
+
+### Pairs with
+
+- `@rolepod/wplab` v1.8.0 — adds:
+  - `Bridge.adminOneTimeLink` / `Bridge.fsRename` methods.
+  - `wp_admin_one_time_link` MCP tool (Bridge wrapper).
+  - `wp_file_disable` / `wp_file_enable` atomic tools (auto-ledger).
+  - `wp_jetengine_{read,write}` adapter pair.
+  - `wp_metabox_{read,write}` adapter pair.
+  - `wp_pods_{read,write}` adapter pair.
+  - `wp_conventions_{get,set}` — structured per-site project style guide
+    storage (free equivalent of a third-party plugin Pro's paywalled feature).
+  - `wp_post_create` now reports `block_count` from Gutenberg comment-syntax
+    scan (informational only).
+
+
 ## [2.4.0] — 2026-05-27 — Theme safety: syntax-check + theme snapshot/restore
 
 ### Added — `POST /wplab/v1/syntax-check`

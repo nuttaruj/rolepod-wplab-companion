@@ -131,18 +131,55 @@ final class ExecutePhp
             ], 400);
         }
 
-        // Eval — guarded
+        // Eval — guarded by AST screen + prod block + session token + crash recovery
         @set_time_limit(intval(ceil($timeoutMs / 1000)));
         $stdout = '';
         $returnValue = null;
         $errorMsg = null;
+        $phpWarnings = [];
+        $startedAt = microtime(true);
+
+        // v2.5 crash recovery: capture E_ERROR / E_PARSE / E_CORE_ERROR via
+        // shutdown handler so a fatal in user payload does not bring the
+        // request down (and thus the page the admin is viewing). We unregister
+        // immediately after eval to keep the handler local to this request.
+        $fatalCaught = null;
+        $prevErrorHandler = set_error_handler(static function (int $errno, string $errstr, string $errfile, int $errline) use (&$phpWarnings): bool {
+            // Capture E_WARNING / E_NOTICE / E_USER_* without halting eval.
+            $phpWarnings[] = [
+                'level' => $errno,
+                'message' => $errstr,
+                'file' => $errfile,
+                'line' => $errline,
+            ];
+            return true; // suppress default
+        });
+
         ob_start();
         try {
             $returnValue = eval($payload); // phpcs:ignore Squiz.PHP.Eval -- guarded by AST screen + prod block + session token
+        } catch (\ParseError $t) {
+            $errorMsg = 'ParseError: ' . $t->getMessage() . ' on line ' . $t->getLine();
+        } catch (\Error $t) {
+            // PHP 7+ fatal errors are Throwable; catch and continue.
+            $errorMsg = get_class($t) . ': ' . $t->getMessage();
+            if ($t->getLine() > 0) {
+                $errorMsg .= ' on line ' . $t->getLine();
+            }
         } catch (\Throwable $t) {
             $errorMsg = get_class($t) . ': ' . $t->getMessage();
         }
         $stdout = (string) ob_get_clean();
+
+        // Restore error handler chain.
+        if ($prevErrorHandler === null) {
+            restore_error_handler();
+        } else {
+            set_error_handler($prevErrorHandler);
+            restore_error_handler();
+        }
+
+        $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
 
         $auditId = Log::append([
             'endpoint' => 'execute-php',
@@ -157,8 +194,8 @@ final class ExecutePhp
             'ok' => $errorMsg === null,
             'return_value' => $returnValue,
             'stdout' => $stdout,
-            'duration_ms' => 0, // v0.1 stub; v0.2 will measure
-            'php_warnings' => [],
+            'duration_ms' => $durationMs,
+            'php_warnings' => $phpWarnings,
             'audit_id' => $auditId,
         ];
         if ($errorMsg !== null) {
