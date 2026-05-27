@@ -76,13 +76,15 @@ final class Shell
     /**
      * Optional footer hint row (matches mockup's "Step N of M · Read the docs" line).
      */
-    public static function footer(string $hint = '', string $docsUrl = 'https://github.com/nuttaruj/rolepod-wplab'): void
+    public static function footer(string $hint = '', string $landingUrl = 'https://nuttaruj.github.io/rolepod-wplab/'): void
     {
         echo '<div class="rp-footer-hint">';
         if ($hint !== '') {
             echo esc_html($hint) . ' &middot; ';
         }
-        echo 'Need help? <a href="' . esc_url($docsUrl) . '" target="_blank" rel="noopener">Read the docs</a>';
+        echo '<a href="' . esc_url($landingUrl) . '" target="_blank" rel="noopener">What can AI do here?</a>';
+        echo ' &middot; ';
+        echo '<a href="https://github.com/nuttaruj/rolepod-wplab" target="_blank" rel="noopener">Docs &amp; source</a>';
         echo '</div>';
     }
 

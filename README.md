@@ -1,5 +1,7 @@
 # rolepod-wp
 
+> **🌐 Curious what AI can do on your WordPress site?** See the [plain-English capability breakdown](https://nuttaruj.github.io/rolepod-wplab/) — 3 setup tiers, what each unlocks.
+>
 > **WordPress arm of the [Rolepod ecosystem](https://github.com/nuttaruj/rolepod).**
 >
 > End users: you do not need to read this repo. Everything you need (install one-liner, setup wizard walkthrough, troubleshooting) lives on the [`rolepod-wplab` main product page](https://github.com/nuttaruj/rolepod-wplab#readme).

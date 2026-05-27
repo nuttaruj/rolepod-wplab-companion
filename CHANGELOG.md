@@ -4,6 +4,21 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.10.3] — 2026-05-27 — Surface the public landing page (plain-English capability breakdown)
+
+Footer hint on every Rolepod admin page now links the public landing
+page at https://nuttaruj.github.io/rolepod-wplab/ — a 3-tier
+plain-English breakdown of what AI can do at each setup level
+(MCP-only / + Plugin / + Custom PHP). Existing GitHub link kept as
+"Docs & source" for developers.
+
+README in both repos (rolepod-wplab MCP + rolepod-wp plugin) also
+links the landing page at the top.
+
+```
+Step N of M · What can AI do here? · Docs & source
+```
+
 ## [2.10.2] — 2026-05-27 — Categories use their own action hook (Abilities API)
 
 v2.10.1 still didn't register any abilities. Root cause #2: WP 7.0
