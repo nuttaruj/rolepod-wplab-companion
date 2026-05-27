@@ -4,6 +4,64 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.8.2] — 2026-05-27 — Setup page rebuilt as multi-step wizard matching mockup
+
+v2.8.0 collapsed admin to one menu but the Setup page kept both Quick
+Start and Manual on the same scroll. Mockup design called for a 4-step
+(Quick) / 5-step (Manual) onboarding flow with a stepper across the
+top, and the sub-nav floating in the top-right of the page header
+instead of below it. v2.8.2 ports the mockup precisely.
+
+### Changed — Shell::open() signature
+
+```php
+Shell::open(string $activeSlug, string $pageLabel, ?string $subtitle = null)
+```
+
+The header now reads `Rolepod for WordPress — <pageLabel>` and shows
+a one-line subtitle below the version. The sub-nav (Setup / Changes /
+Settings) renders top-right of the header instead of below it. On
+narrow viewports (≤720px) the header collapses to a column with the
+sub-nav left-aligned underneath.
+
+Also added `Shell::footer()` — renders the "Step N of M · Read the
+docs" hint line at the bottom of the page (used on every Rolepod
+page, not just Setup).
+
+### Rewritten — SetupWizard as multi-step
+
+Quick path:
+  `0 Choose path` → `1 Generate token` → `2 Connect AI CLI` → `3 Verify`
+
+Manual path:
+  `0 Choose path` → `1 App password` → `2 Install MCP` → `3 Wire CLI` → `4 Verify`
+
+State encoding:
+- Step + path = URL query (`?step=N&path=quick|manual`)
+- Minted pair token = WP transient keyed on user_id with the same
+  60-min TTL as the underlying `PairToken`; never appears in the URL
+  so it can't leak via browser history or referrer headers.
+
+Continue / Back navigation is plain `<a>` links between steps; only
+Step 0 (Choose path) and Step 1 (Generate token) use POST forms (path
+selection + token mint).
+
+The Verify step polls `WP_Application_Passwords::get_user_application_passwords()`
+on render to detect a `wplab-pair-…` (or `rolepod-wp-pair-…`) entry —
+no extra REST calls, no setInterval, no JS polling. "Re-test" button
+re-renders the step.
+
+### Added CSS
+
+- `.rp-wizard` / `.rp-wizard-stepper` / `.rp-wizard-body` / `.rp-wizard-nav`
+- `.rp-path-card` with `:has(input:checked)` selected state
+- `.rp-info-tile-grid` / `.rp-info-tile`
+- `.rp-verify` + `.rp-verify-spinner` (pure CSS animation)
+- `.rp-footer-hint`
+
+Still zero JS framework, no font CDN, no build step. Asset size +2KB
+CSS / +0KB JS.
+
 ## [2.8.1] — 2026-05-27 — Shorter Quick Start prompt (link to README install docs)
 
 The Setup page's "Generate pair token" output used to bake per-CLI install

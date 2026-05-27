@@ -6,21 +6,27 @@ namespace Rolepod\Wp\Admin;
 use Rolepod\Wp\Config;
 
 /**
- * Shared page shell for all Rolepod WP admin pages — header, sub-nav,
- * and a consistent .rp-shell wrapper that scopes all design tokens.
+ * Shared page shell for all Rolepod WP admin pages.
  *
- * All output uses static markup; no buffering, no template engine. Each
- * page renders directly into the WP admin body — same speed as the
- * legacy plain-html pages, with a much tighter visual layer.
+ * Layout (matches brief/Demo mockup):
+ *
+ *   ┌──────────────────────────────────────────────────────────────┐
+ *   │ [R logo] Rolepod for WordPress — <page>  │  [Setup][Ch][Set] │
+ *   │          v2.8.x · <one-line subtitle>    │                   │
+ *   └──────────────────────────────────────────────────────────────┘
+ *   <content>
+ *   <footer hint>
  */
 final class Shell
 {
     /**
-     * Render header + open the shell wrapper.
+     * Render header + open the wrapper. Caller must close with self::close().
      *
-     * @param string $activeSlug One of Menu::SLUG_* constants.
+     * @param string      $activeSlug One of Menu::SLUG_* constants.
+     * @param string      $pageLabel  Short label appended after the em-dash in the title.
+     * @param string|null $subtitle   Optional single-line description shown under the version.
      */
-    public static function open(string $activeSlug): void
+    public static function open(string $activeSlug, string $pageLabel, ?string $subtitle = null): void
     {
         $config = Config::all();
         $endpointsEnabled = (bool) ($config['endpoints_enabled'] ?? false);
@@ -28,27 +34,28 @@ final class Shell
         $statusClass = $endpointsEnabled ? '' : 'is-off';
 
         $tabs = [
-            ['slug' => Menu::SLUG_SETUP,    'label' => 'Setup',          'icon' => self::iconSparkle()],
-            ['slug' => Menu::SLUG_CHANGES,  'label' => 'Change Ledger',  'icon' => self::iconList()],
-            ['slug' => Menu::SLUG_SETTINGS, 'label' => 'Settings',       'icon' => self::iconCog()],
+            ['slug' => Menu::SLUG_SETUP,    'label' => 'Setup',    'icon' => self::iconSparkle()],
+            ['slug' => Menu::SLUG_CHANGES,  'label' => 'Changes',  'icon' => self::iconList()],
+            ['slug' => Menu::SLUG_SETTINGS, 'label' => 'Settings', 'icon' => self::iconCog()],
         ];
 
         echo '<div class="wrap rp-shell">';
         echo '<header class="rp-pageheader">';
         echo '  <div class="rp-pageheader-l">';
         echo '    <div class="rp-logo" aria-hidden="true">R</div>';
-        echo '    <div>';
-        echo '      <h1>Rolepod for WordPress</h1>';
+        echo '    <div class="rp-pageheader-titles">';
+        echo '      <h1>Rolepod for WordPress <span class="rp-pagetitle-sep">&mdash;</span> <span class="rp-pagetitle-page">' . esc_html($pageLabel) . '</span></h1>';
         echo '      <div class="rp-version">';
         echo '        <span class="rp-dot ' . esc_attr($statusClass) . '" aria-hidden="true"></span>';
         echo '        v' . esc_html(ROLEPOD_WP_VERSION) . ' &middot; ' . esc_html($statusLabel);
+        if ($subtitle !== null && $subtitle !== '') {
+            echo '        &nbsp;&middot;&nbsp;<span class="rp-subtitle">' . esc_html($subtitle) . '</span>';
+        }
         echo '      </div>';
         echo '    </div>';
         echo '  </div>';
-        echo '  <a class="rp-btn rp-btn-ghost" href="https://github.com/nuttaruj/rolepod-wplab" target="_blank" rel="noopener">Docs &rarr;</a>';
-        echo '</header>';
 
-        echo '<nav class="rp-subnav" aria-label="Rolepod WP sections">';
+        echo '  <nav class="rp-subnav" aria-label="Rolepod WP sections">';
         foreach ($tabs as $tab) {
             $isActive = $tab['slug'] === $activeSlug;
             $cls = $isActive ? 'is-active' : '';
@@ -57,7 +64,22 @@ final class Shell
             echo esc_html($tab['label']);
             echo '</a>';
         }
-        echo '</nav>';
+        echo '  </nav>';
+
+        echo '</header>';
+    }
+
+    /**
+     * Optional footer hint row (matches mockup's "Step N of M · Read the docs" line).
+     */
+    public static function footer(string $hint = '', string $docsUrl = 'https://github.com/nuttaruj/rolepod-wplab'): void
+    {
+        echo '<div class="rp-footer-hint">';
+        if ($hint !== '') {
+            echo esc_html($hint) . ' &middot; ';
+        }
+        echo 'Need help? <a href="' . esc_url($docsUrl) . '" target="_blank" rel="noopener">Read the docs</a>';
+        echo '</div>';
     }
 
     public static function close(): void
@@ -65,7 +87,6 @@ final class Shell
         echo '</div>';
     }
 
-    /** Inline SVG icons used in sub-nav. Tiny, no font fetch. */
     private static function iconSparkle(): string
     {
         return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M12 3v6M12 15v6M3 12h6M15 12h6M6 6l3 3M15 15l3 3M6 18l3-3M15 9l3-3"/></svg>';

@@ -64,7 +64,7 @@ final class SettingsPage
             $recentFatals = [];
         }
 
-        Shell::open(Menu::SLUG_SETTINGS);
+        Shell::open(Menu::SLUG_SETTINGS, 'Settings', 'Endpoints, guardian, audit log.');
 
         if ($savedNotice !== null) {
             echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($savedNotice) . '</p></div>';
@@ -166,6 +166,7 @@ final class SettingsPage
         </div>
 
         <?php
+        Shell::footer();
         Shell::close();
     }
 

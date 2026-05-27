@@ -53,7 +53,7 @@ final class ChangeLedgerPage
 
         $totals = self::computeTotals();
 
-        Shell::open(Menu::SLUG_CHANGES);
+        Shell::open(Menu::SLUG_CHANGES, 'Change Ledger', 'Every AI-issued write — reversible by row.');
 
         if ($notice !== null) {
             echo '<div class="notice notice-' . esc_attr($notice['type']) . ' is-dismissible"><p>' . esc_html($notice['message']) . '</p></div>';
@@ -191,6 +191,7 @@ final class ChangeLedgerPage
         </form>
 
         <?php
+        Shell::footer();
         Shell::close();
     }
 
