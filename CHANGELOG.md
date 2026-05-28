@@ -4,6 +4,62 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.12.1] — 2026-05-28 — Section `_css_classes` rendering fix
+
+Pairs with `@rolepod/wplab` 1.17.1. Fixes a known Elementor 4.x free-
+version quirk that the WalnutZtudio polish session surfaced.
+
+### Fixed
+
+- **Section-level `_css_classes` now lands on the rendered `<section>`
+  tag (#19).** Elementor 4.x renders widget-level `_css_classes`
+  natively but silently drops section-level entries. New
+  `Rolepod\Wp\ElementorCompat` class hooks the
+  `elementor/frontend/the_content` filter, walks the post's
+  `_elementor_data`, builds a section_id → `_css_classes` map, and
+  regex-injects the classes into each `<section data-id="X">` opening
+  tag. Inner sections (`isInner=true`) included.
+
+### Detection trail
+
+For posterity (this is a non-obvious Elementor quirk):
+
+- The legacy `elementor/element/before_render` action only fires in
+  editor / control panel context — confirmed by tracing the live hook
+  tree on a 4.1.1 install.
+- `elementor/frontend/before_render` fires only for `widget` elType in
+  Elementor 4.x, NOT for `section`. So a hook-based add-render-attribute
+  workaround cannot work for sections.
+- The `the_content` post-filter approach is the only public surface
+  that lets us inject the classes after Elementor's section renderer
+  has run.
+
+### Internal
+
+- New: `src/ElementorCompat.php` — single static class with `init()` +
+  `rewriteSectionClasses()` + private map builder.
+- `rolepod-wp.php` calls `\Rolepod\Wp\ElementorCompat::init()` at
+  top-level plugin load (no action wrapper — the filter registration
+  itself does not run Elementor code, safe to call when Elementor is
+  absent).
+
+### Field-tested
+
+After hot-deploy:
+
+```html
+<section class="elementor-section elementor-top-section elementor-element elementor-element-11bf8f9d ... wnz-sec wnz-hero">
+```
+
+Was previously:
+
+```html
+<section class="elementor-section elementor-top-section elementor-element elementor-element-11bf8f9d ...">
+```
+
+(no `wnz-sec wnz-hero` suffix). The WalnutZtudio hero CSS that targets
+`.wnz-hero` selector now matches.
+
 ## [2.12.0] — 2026-05-28 — widget-attr rehydrate + template-apply + private zone + async jobs
 
 Pairs with `@rolepod/wplab` 1.17.0. Closes the remaining capability gaps

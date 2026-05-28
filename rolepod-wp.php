@@ -5,7 +5,7 @@
  * Description:       The WordPress arm of the Rolepod ecosystem (https://github.com/nuttaruj/rolepod). Exposes guarded REST endpoints so AI coding agents (Claude Code / Cursor / Codex / Gemini) — driven by the rolepod-wplab MCP server — can run runtime introspection, the one-click pair wizard, and (with explicit opt-in) execute-php on this WordPress install. Endpoints are OFF by default; enable per-feature in Settings → Rolepod for WordPress. v2.6 adds a mu-plugin recovery guardian that survives main-plugin parse/fatal errors.
  * Author:            nuttaruj
  * Author URI:        https://github.com/nuttaruj
- * Version:           2.12.0
+ * Version:           2.12.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * License:           MIT
@@ -21,7 +21,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ROLEPOD_WP_VERSION', '2.12.0');
+define('ROLEPOD_WP_VERSION', '2.12.1');
 define('ROLEPOD_WP_FILE', __FILE__);
 define('ROLEPOD_WP_DIR', plugin_dir_path(__FILE__));
 
@@ -83,6 +83,12 @@ add_action('rest_api_init', static function (): void {
 // singular() page that has stored widget attrs, so theme JS can read the
 // map BEFORE its effects init scans for data-* attributes.
 add_action('wp_footer', [\Rolepod\Wp\Endpoint\ElementorWidgetAttribute::class, 'emitBridgeFooter'], 5);
+
+// v2.12.1 — patch Elementor free's section render so `_css_classes` set on
+// section settings actually lands on the rendered <section> tag. Widget-
+// level _css_classes already works; sections silently dropped. Without
+// this, AI-built _elementor_data round-trips lose section-level CSS hooks.
+\Rolepod\Wp\ElementorCompat::init();
 
 // v2.12 — auto-install wp-content/private/.htaccess on first scoped use so
 // the dev scratch zone is never publicly readable via HTTP.
