@@ -5,7 +5,7 @@
  * Description:       The WordPress arm of the Rolepod ecosystem (https://github.com/nuttaruj/rolepod). Exposes guarded REST endpoints so AI coding agents (Claude Code / Cursor / Codex / Gemini) — driven by the rolepod-wplab MCP server — can run runtime introspection, the one-click pair wizard, and (with explicit opt-in) execute-php on this WordPress install. Endpoints are OFF by default; enable per-feature in Settings → Rolepod for WordPress. v2.6 adds a mu-plugin recovery guardian that survives main-plugin parse/fatal errors.
  * Author:            nuttaruj
  * Author URI:        https://github.com/nuttaruj
- * Version:           2.10.4
+ * Version:           2.12.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * License:           MIT
@@ -21,7 +21,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ROLEPOD_WP_VERSION', '2.10.4');
+define('ROLEPOD_WP_VERSION', '2.12.0');
 define('ROLEPOD_WP_FILE', __FILE__);
 define('ROLEPOD_WP_DIR', plugin_dir_path(__FILE__));
 
@@ -66,7 +66,33 @@ add_action('rest_api_init', static function (): void {
     \Rolepod\Wp\Endpoint\Options::register();
     // v2.7.2 — SELECT-only DB query endpoint (bypass wp-cli `db query` shell-escape + {prefix} placeholder hazards)
     \Rolepod\Wp\Endpoint\DbQuery::register();
+    // v2.11 — wplab Phase 2 surface: atomic batch write, fs primitives, Elementor introspection.
+    \Rolepod\Wp\Endpoint\FsWriteBatch::register();
+    \Rolepod\Wp\Endpoint\DirEnsure::register();
+    \Rolepod\Wp\Endpoint\FsCopy::register();
+    \Rolepod\Wp\Endpoint\FsList::register();
+    \Rolepod\Wp\Endpoint\ElementorIntrospect::register();
+    // v2.12 — wplab Phase 3.2: widget data-attr rehydrate, template-apply, async jobs.
+    \Rolepod\Wp\Endpoint\ElementorWidgetAttribute::register();
+    \Rolepod\Wp\Endpoint\ElementorTemplateApply::register();
+    \Rolepod\Wp\Endpoint\JobCreate::register();
+    \Rolepod\Wp\Endpoint\JobStatus::register();
 });
+
+// v2.12 — widget-attr footer bridge. Emits a JSON+vanilla-JS pair on every
+// singular() page that has stored widget attrs, so theme JS can read the
+// map BEFORE its effects init scans for data-* attributes.
+add_action('wp_footer', [\Rolepod\Wp\Endpoint\ElementorWidgetAttribute::class, 'emitBridgeFooter'], 5);
+
+// v2.12 — auto-install wp-content/private/.htaccess on first scoped use so
+// the dev scratch zone is never publicly readable via HTTP.
+add_action('rest_api_init', static function (): void {
+    $priv = WP_CONTENT_DIR . '/private';
+    $ht = $priv . '/.htaccess';
+    if (is_dir($priv) && !is_file($ht)) {
+        @file_put_contents($ht, "Require all denied\n");
+    }
+}, 99);
 
 // v2.5 — intercept ?rolepod_wp_otl=<token> on any request for the one-time
 // admin login flow. Priority 1 so it runs before WP's main routing.

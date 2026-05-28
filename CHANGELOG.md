@@ -4,6 +4,123 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.12.0] — 2026-05-28 — widget-attr rehydrate + template-apply + private zone + async jobs
+
+Pairs with `@rolepod/wplab` 1.17.0. Closes the remaining capability gaps
+(#6, #10, #13, #15, #17, #18) — see `brief/wplab-capability-gaps.md` in
+the MCP repo.
+
+### Added
+
+- **`POST /wp-json/wplab/v1/elementor/widget-attribute`** — stores per-
+  widget `data-*` attribute maps in `_rolepod_widget_attrs` post meta.
+  Sanitization: attr keys must match `/^[a-z][a-z0-9-]{0,30}$/`; values
+  are stringified. Empty `attrs` map clears the widget's entry.
+- **Footer bridge emitter** (`wp_footer` priority 5) — outputs a
+  `<script id="rolepod-widget-attrs" type="application/json">` carrying
+  the post's full attr map plus a 4-line vanilla-JS reader that walks
+  the map and applies `data-*` attrs to `[data-id="<widget_id>"]`
+  matches. Theme JS that searches for `[data-scramble]` etc finds the
+  rehydrated attrs on first paint.
+- **`POST /wp-json/wplab/v1/elementor/template-apply`** — companion
+  counterpart to `template-export`. Validates target post existence,
+  refuses to overwrite non-empty `_elementor_data` without
+  `overwrite=true`, applies optional `replace_strings`, regenerates
+  every 6-12 char hex element id to avoid collisions with the source,
+  writes `_elementor_data` + flags, clears the cached CSS meta.
+- **`POST /wp-json/wplab/v1/job/create` + `GET /wp-json/wplab/v1/job/status`** —
+  fire-and-poll wp-cli runner. `/job/create` spawns wp-cli detached
+  via `popen()`, captures the OS pid, stores a job record (args, pid,
+  log paths, started_at) in a 1h transient. `/job/status` checks
+  `/proc/<pid>` (or `posix_kill` fallback) and returns `state` +
+  `elapsed_seconds` + tail of stdout/stderr (default 8KB, max 64KB).
+  Returns 503 EXEC_DISABLED when `exec()` is off.
+- **`wp-content/private/` added to scoped dirs** — accepted by FsWrite,
+  FsWriteBatch, DirEnsure, FsCopy. First use auto-installs
+  `Require all denied` `.htaccess` in that dir (via `rest_api_init`
+  priority 99) so dev scratch never leaks over HTTP.
+
+### Internal
+
+- New endpoint classes: `Endpoint\ElementorWidgetAttribute`,
+  `Endpoint\ElementorTemplateApply`, `Endpoint\JobCreate`,
+  `Endpoint\JobStatus`.
+- All four wire into the existing `rest_api_init` hook in
+  `rolepod-wp.php`.
+- `wp_footer` hook + `.htaccess` installer also added in
+  `rolepod-wp.php`.
+
+### Caveats
+
+- The widget-attr bridge runs on `wp_footer` — themes that suppress
+  `wp_footer()` (some FSE patterns) won't rehydrate. The existing
+  `block_theme_body_open_risk` connect warning already flags this.
+- Job logs live under `wp-content/uploads/.rolepod-jobs/<job_id>.{out,err}`.
+  Not auto-rotated yet — caller is responsible for cleanup once the
+  job's transient TTL expires (1h).
+- `/job/status` infers exit code from `posix_kill` + stderr presence; a
+  precise exit code requires the spawned wp-cli to write its status to
+  a sidecar file (a future refinement — not blocking for the current
+  use cases).
+
+## [2.11.0] — 2026-05-28 — Atomic batch write + fs primitives + Elementor introspection
+
+Pairs with `@rolepod/wplab` 1.15.0. Closes companion-coupled gaps from
+the WalnutZtudio capability-gap audit (`brief/wplab-capability-gaps.md`
+in the MCP repo).
+
+### Added
+
+- **`POST /wp-json/wplab/v1/fs-write-batch`** — atomic multi-file write
+  (max 100 entries / call). For every PHP entry runs `php -l`; for every
+  bootstrap-class entry (`functions.php`, `header.php`, `footer.php`,
+  `mu-plugins/*.php`, `wp-config.php`) walks the cross-file
+  `require`/`include` chain — a missing target is OK if it appears as
+  another entry in the same batch. Stages every write to
+  `<abs>.wplab-stage-<batchId>` first, snapshots existing files to
+  `.wplab-bak-<batchId>`, then commits via per-file `rename()`. Failure
+  at any phase restores backups and removes stage files — the WP install
+  is never left in a half-written state.
+- **`POST /wp-json/wplab/v1/dir-ensure`** — idempotent `mkdir -p` for
+  scoped wp-content paths. Returns `created: bool` so the caller knows
+  whether the directory pre-existed.
+- **`POST /wp-json/wplab/v1/fs-copy`** — file → file copy within scoped
+  paths. Auto-creates the destination's parent dir; refuses to overwrite
+  unless `overwrite=true`. Production-guarded.
+- **`GET /wp-json/wplab/v1/fs-list`** — recursive directory listing with
+  size + mtime + type. Depth-capped (default 2, max 5) and entry-capped
+  (2000; `truncated: true` signals more existed). Read-only; allowed on
+  production.
+- **`GET /wp-json/wplab/v1/elementor/widget-schema`** — introspect
+  Elementor widget controls registry. With `widget=` returns the full
+  control map for one widget type; without it returns every registered
+  widget type. Returns 503 `ELEMENTOR_NOT_LOADED` when Elementor is
+  missing. Read-only.
+- **`GET /wp-json/wplab/v1/elementor/template-export`** — exports the
+  parsed `_elementor_data` of an existing page plus the deduplicated
+  list of widget types used. Lets AI agents learn the structure of
+  human-built Elementor pages instead of reverse-engineering JSON.
+
+### Internal
+
+- New endpoint classes: `Endpoint\FsWriteBatch`, `Endpoint\DirEnsure`,
+  `Endpoint\FsCopy`, `Endpoint\FsList`, `Endpoint\ElementorIntrospect`.
+- All five wire into the existing `rest_api_init` hook in
+  `rolepod-wp.php`. No schema changes.
+- Re-uses `Security\SessionToken::verify()` + `Security\ProductionGuard`
+  + `Config::endpointsEnabled()` exactly like the existing endpoints —
+  no new permission surface to audit.
+
+### Caveats
+
+- `fs-write-batch` `php -l` step is skipped when the host disables
+  `exec()` — caller can opt out explicitly via `skip_php_lint: true`.
+- `fs-list` `entries` are bounded to 2000 per call to keep response
+  bodies under HTTP gateway limits; tighten `depth` for narrower scans.
+- Elementor widget control schemas can be huge (Counter widget = 179
+  controls). When asking for one widget you may want to filter
+  client-side to a known subset.
+
 ## [2.10.4] — 2026-05-27 — Also surface landing link on Setup wizard Step 0
 
 v2.10.3 updated `Shell::footer()` but the Setup wizard Step 0 renders
