@@ -5,7 +5,7 @@
  * Description:       The WordPress arm of the Rolepod ecosystem (https://github.com/nuttaruj/rolepod). Exposes guarded REST endpoints so AI coding agents (Claude Code / Cursor / Codex / Gemini) — driven by the rolepod-wplab MCP server — can run runtime introspection, the one-click pair wizard, and (with explicit opt-in) execute-php on this WordPress install. Endpoints are OFF by default; enable per-feature in Settings → Rolepod for WordPress. v2.6 adds a mu-plugin recovery guardian that survives main-plugin parse/fatal errors.
  * Author:            nuttaruj
  * Author URI:        https://github.com/nuttaruj
- * Version:           2.13.0
+ * Version:           2.13.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * License:           MIT
@@ -21,7 +21,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ROLEPOD_WP_VERSION', '2.13.0');
+define('ROLEPOD_WP_VERSION', '2.13.1');
 define('ROLEPOD_WP_FILE', __FILE__);
 define('ROLEPOD_WP_DIR', plugin_dir_path(__FILE__));
 
@@ -102,6 +102,20 @@ add_action('rest_api_init', static function (): void {
     $priv = WP_CONTENT_DIR . '/private';
     $ht = $priv . '/.htaccess';
     if (is_dir($priv) && !is_file($ht)) {
+        @file_put_contents($ht, "Require all denied\n");
+    }
+}, 99);
+
+// v2.13.1 — consolidated data namespace: all Rolepod runtime artifacts live
+// under wp-content/uploads/rolepod-wp/ (backups, tmp, …). Ensure the dir
+// exists with a deny-all .htaccess so backups/payloads are never web-readable.
+add_action('rest_api_init', static function (): void {
+    $base = trailingslashit((string) (wp_upload_dir()['basedir'] ?? WP_CONTENT_DIR . '/uploads')) . 'rolepod-wp';
+    if (!is_dir($base)) {
+        wp_mkdir_p($base);
+    }
+    $ht = $base . '/.htaccess';
+    if (is_dir($base) && !is_file($ht)) {
         @file_put_contents($ht, "Require all denied\n");
     }
 }, 99);

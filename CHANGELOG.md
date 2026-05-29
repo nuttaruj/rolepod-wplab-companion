@@ -4,6 +4,16 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.13.1] — 2026-05-29 — Consolidated data namespace + deny-htaccess
+
+### Added
+
+- On `rest_api_init`, ensure `wp-content/uploads/rolepod-wp/` exists with a
+  deny-all `.htaccess` (`Require all denied`), mirroring the existing
+  `wp-content/private/` guard. This is the single home for Rolepod runtime
+  artifacts (backups, tmp payloads written by `@rolepod/wplab` 1.21.3), so
+  backups are never web-readable. Idempotent; cheap.
+
 ## [2.13.0] — 2026-05-29 — Site-owned skills
 
 Adds CPT-backed agent skills — site-specific playbooks (build conventions,
