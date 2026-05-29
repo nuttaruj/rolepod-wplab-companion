@@ -179,7 +179,7 @@ final class Pair
             return self::redeemFail($ip, 'PAIR_REDEEM_APP_PASSWORD_EMPTY', 'WP returned empty App Password');
         }
 
-        $capabilities = ['introspect_hooks', 'introspect_transients', 'introspect_options_full'];
+        $capabilities = ['introspect_hooks', 'introspect_transients', 'introspect_options_full', 'skills'];
         if (Config::executePhpEnabled() && !ProductionGuard::isProduction()) {
             $capabilities[] = 'execute_php';
         }

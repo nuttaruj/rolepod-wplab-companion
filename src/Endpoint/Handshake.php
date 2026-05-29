@@ -56,7 +56,7 @@ final class Handshake
         $userId = get_current_user_id();
         $token = SessionToken::issue($userId);
 
-        $capabilities = ['introspect_hooks', 'introspect_transients', 'introspect_options_full'];
+        $capabilities = ['introspect_hooks', 'introspect_transients', 'introspect_options_full', 'skills'];
         if (Config::executePhpEnabled() && !ProductionGuard::isProduction()) {
             $capabilities[] = 'execute_php';
         }

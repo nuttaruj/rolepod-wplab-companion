@@ -4,6 +4,39 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.13.0] — 2026-05-29 — Site-owned skills
+
+Adds CPT-backed agent skills — site-specific playbooks (build conventions,
+brand voice, schema quirks) that travel with the WordPress install and are
+discoverable by any agent that connects. Pairs with `@rolepod/wplab` 1.21.0.
+
+### Added
+
+- **Skills CPT (`rolepod_wp_skill`)** — one skill per post (title→slug,
+  excerpt→trigger description, content→SKILL.md body) with 15 native
+  revisions for recovery. `src/Skills/Cpt.php`.
+- **`src/Skills/Parser.php`** — lenient SKILL.md frontmatter parser
+  (name / description / enable_agentic / enable_prompt) + canonical renderer
+  + slug normalizer. Smart double-encode unescape: expands literal `\n`/`\t`
+  ONLY when the body has no real newline (a flattened double-JSON-encoded
+  payload), so legitimate escapes inside code samples survive. `enable_prompt`
+  defaults OFF (opt-in). Soft warnings for empty description, empty body, and
+  oversized (>50 KB) bodies.
+- **`src/Skills/Catalog.php`** — structured read side (find / all /
+  discoverable / catalog). Single user-CPT source — no premature registry
+  abstraction.
+- **REST endpoints** under `wplab/v1/skills` (`src/Endpoint/Skills.php`):
+  - `GET /skills` — compact catalog (slug + description, no bodies)
+  - `GET /skills/<slug>` — full record + rendered SKILL.md
+  - `POST /skills` — create/update (session-token), `on_conflict`
+    fail | replace | rename
+  - `POST /skills/<slug>/edit` — patch fields
+  - `DELETE /skills/<slug>` — trash (recoverable, never force-deleted)
+  - Mutations are audited via `Log`; reads need `manage_options`, writes also
+    require a valid session token. Collision responses carry `suggested_slug`.
+- **`skills` capability** advertised in the Handshake + Pair responses so the
+  MCP client can feature-gate the skill tools.
+
 ## [2.12.1] — 2026-05-28 — Section `_css_classes` rendering fix
 
 Pairs with `@rolepod/wplab` 1.17.1. Fixes a known Elementor 4.x free-
