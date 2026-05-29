@@ -4,6 +4,16 @@ All notable changes to this plugin are documented here. Follows [Keep a Changelo
 
 Plugin versions track `@rolepod/wplab` MCP family. See `MIN_COMPANION_VERSION` in `rolepod-wplab/src/companion/constants.ts` for the floor the MCP client expects.
 
+## [2.13.2] — 2026-05-29 — Fix: fs-write bytes_written on append
+
+### Fixed
+
+- `/fs-write` reported the wrong `bytes_written` on `mode=append` — it returned
+  `filesize()`, whose stat result is cached from the pre-write backup `copy()`,
+  so callers saw the file's *old* size instead of the bytes written. Now returns
+  the actual return value of `file_put_contents()` (bytes appended on append;
+  equals content length on overwrite). `src/Endpoint/FsWrite.php`.
+
 ## [2.13.1] — 2026-05-29 — Consolidated data namespace + deny-htaccess
 
 ### Added

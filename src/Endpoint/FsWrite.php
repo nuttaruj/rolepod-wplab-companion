@@ -118,11 +118,15 @@ final class FsWrite
             ], 500);
         }
 
+        // Use the byte count file_put_contents actually wrote — NOT
+        // filesize(), whose stat result is cached from the earlier backup
+        // copy() and (on append) reports the pre-write size. For append this
+        // is the bytes appended; for overwrite it equals strlen($content).
         return new WP_REST_Response([
             'ok' => true,
             'path' => $relPath,
             'absolute_path' => $absPath,
-            'bytes_written' => filesize($absPath),
+            'bytes_written' => $written,
             'backup_path' => $backupPath,
         ], 200);
     }
